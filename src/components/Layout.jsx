@@ -15,10 +15,10 @@ export default function Layout({ children, title, subtitle, actions }) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 md:flex">
+    <div className="min-h-screen bg-slate-50 text-slate-900 md:flex md:h-screen md:overflow-hidden">
       <Sidebar />
-      <main className="min-w-0 flex-1">
-        <header className="border-b border-cyan-100 bg-white px-4 py-5 shadow-[inset_0_-1px_0_rgba(14,116,144,0.06)] sm:px-6 lg:px-8">
+      <main className="scroll-invisible min-w-0 flex-1 md:h-screen md:overflow-y-auto">
+        <header className="sticky top-0 z-30 border-b border-cyan-100 bg-white/95 px-4 py-5 shadow-[inset_0_-1px_0_rgba(14,116,144,0.06)] backdrop-blur sm:px-6 lg:px-8">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <div className="mb-2 flex gap-1.5">
@@ -52,7 +52,7 @@ export default function Layout({ children, title, subtitle, actions }) {
             </div>
           </div>
         </header>
-        <div className="px-4 py-6 sm:px-6 lg:px-8">{children}</div>
+        <div className="px-4 py-6 pb-10 sm:px-6 lg:px-8">{children}</div>
       </main>
     </div>
   );

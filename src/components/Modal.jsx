@@ -35,7 +35,7 @@ export default function Modal({ open, onClose, title, description, eyebrow = 'Tr
           </button>
         </div>
 
-        <div className="max-h-[62vh] overflow-y-auto p-5">{children}</div>
+        <div className="scroll-invisible max-h-[62vh] overflow-y-auto p-5">{children}</div>
         {footer && (
           <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:justify-end">
             {footer}

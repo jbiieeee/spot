@@ -132,14 +132,15 @@ export default function Dashboard() {
 
   return (
     <Layout title="Dashboard" subtitle="Real-time overview of patrol operations">
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Active Guards" value={activeGuards} sub={`of ${guards.length} total`} />
         <Stat label="Patrols Today" value={todaysLogs.length} sub="checkpoint scans" tone="emerald" />
         <Stat label="Open Incidents" value={openIncidents} sub="require attention" tone="rose" />
         <Stat label="Sites Monitored" value={sites.length} sub={`${checkpoints.length} checkpoints`} tone="amber" />
       </div>
 
-      <div className="mb-6">
+      <div>
         <OperationsPanel
           activeGuards={activeGuards}
           totalGuards={guards.length}
@@ -151,7 +152,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="card lg:col-span-2">
+        <div className="card flex min-h-[360px] flex-col lg:col-span-2">
           <div className="border-b border-slate-200 px-5 py-4">
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-sm bg-cyan-500" />
@@ -159,7 +160,7 @@ export default function Dashboard() {
             </div>
             <p className="text-xs text-slate-500">Latest checkpoint scans from the field</p>
           </div>
-          <div className="divide-y divide-slate-100">
+          <div className="scroll-invisible min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto lg:max-h-[44vh]">
             {recentLogs.length === 0 && (
               <div className="p-8 text-center">
                 <div className="mx-auto mb-3 h-10 w-10 rounded-lg border border-dashed border-cyan-200 bg-cyan-50" />
@@ -187,15 +188,22 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="card">
+        <div className="card flex min-h-[360px] flex-col">
           <div className="border-b border-slate-200 px-5 py-4">
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-sm bg-emerald-500" />
               <h3 className="font-semibold text-slate-950">Guards On Duty</h3>
             </div>
           </div>
-          <div className="divide-y divide-slate-100">
-            {guards.filter((g) => g.active).slice(0, 6).map((g) => (
+          <div className="scroll-invisible min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto lg:max-h-[44vh]">
+            {guards.filter((g) => g.active).length === 0 && (
+              <div className="p-8 text-center">
+                <div className="mx-auto mb-3 h-10 w-10 rounded-lg border border-dashed border-emerald-200 bg-emerald-50" />
+                <div className="text-sm font-medium text-slate-600">No guards on duty</div>
+                <div className="mt-1 text-xs text-slate-400">Active personnel will appear here.</div>
+              </div>
+            )}
+            {guards.filter((g) => g.active).map((g) => (
               <div key={g.id} className="flex items-center gap-3 px-5 py-3">
                 <div className="grid h-9 w-9 place-items-center rounded-md bg-cyan-50 text-sm font-semibold text-cyan-800 ring-1 ring-inset ring-cyan-100">
                   {g.name?.[0] || '?'}
@@ -209,6 +217,7 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+      </div>
       </div>
     </Layout>
   );

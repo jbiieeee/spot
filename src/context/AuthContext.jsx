@@ -2,12 +2,16 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import {
   browserLocalPersistence,
   browserSessionPersistence,
+  EmailAuthProvider,
   onAuthStateChanged,
+  reauthenticateWithCredential,
   setPersistence,
   signInWithEmailAndPassword,
-  signOut
+  signOut,
+  updatePassword,
+  updateProfile
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, hasFirebaseConfig } from '../lib/firebase';
 
 const AuthContext = createContext(null);
@@ -54,8 +58,28 @@ export function AuthProvider({ children }) {
     await signOut(auth);
   };
 
+  const updateAccountProfile = async ({ name }) => {
+    if (!user) throw new Error('No active user session.');
+    const trimmedName = name?.trim();
+    if (!trimmedName) throw new Error('Display name is required.');
+
+    await updateDoc(doc(db, 'users', user.uid), { name: trimmedName });
+    await updateProfile(user, { displayName: trimmedName });
+    setProfile((current) => ({ ...(current || {}), id: user.uid, name: trimmedName }));
+  };
+
+  const changePassword = async ({ currentPassword, newPassword }) => {
+    if (!user?.email) throw new Error('No active user session.');
+    if (!currentPassword || !newPassword) throw new Error('Current and new password are required.');
+    if (newPassword.length < 6) throw new Error('New password must be at least 6 characters.');
+
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+    await updatePassword(user, newPassword);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, login, logout, configError }}>
+    <AuthContext.Provider value={{ user, profile, loading, login, logout, updateAccountProfile, changePassword, configError }}>
       {children}
     </AuthContext.Provider>
   );
