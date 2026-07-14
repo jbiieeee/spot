@@ -1,0 +1,44 @@
+// Firestore security rules for S.P.O.T.
+// Paste these into Firebase Console → Firestore Database → Rules → Publish
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: get the caller's user profile
+    function userDoc()  { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function isAuthed() { return request.auth != null; }
+    function isSupervisor() { return isAuthed() && userDoc().data.role == 'supervisor'; }
+    function isSelf(uid)    { return isAuthed() && request.auth.uid == uid; }
+
+    // /users : supervisors manage all; a guard can read/update their own doc
+    match /users/{uid} {
+      allow read:   if isAuthed() && (isSupervisor() || isSelf(uid));
+      allow create: if isSupervisor();
+      allow update: if isSupervisor() || (isSelf(uid) &&
+                       request.resource.data.role == resource.data.role);
+      allow delete: if isSupervisor();
+    }
+
+    // Reference data — supervisors write, all authed users read
+    match /sites/{id}       { allow read: if isAuthed(); allow write: if isSupervisor(); }
+    match /checkpoints/{id} { allow read: if isAuthed(); allow write: if isSupervisor(); }
+    match /routes/{id}      { allow read: if isAuthed(); allow write: if isSupervisor(); }
+    match /schedules/{id}   { allow read: if isAuthed(); allow write: if isSupervisor(); }
+
+    // Patrol logs — guards create their own; supervisors read all
+    match /patrolLogs/{id} {
+      allow read:   if isAuthed() && (isSupervisor() || resource.data.guardId == request.auth.uid);
+      allow create: if isAuthed() && request.resource.data.guardId == request.auth.uid;
+      allow update, delete: if isSupervisor();
+    }
+
+    // Incidents — guards file their own; supervisors read/resolve
+    match /incidents/{id} {
+      allow read:   if isAuthed() && (isSupervisor() || resource.data.guardId == request.auth.uid);
+      allow create: if isAuthed() && request.resource.data.guardId == request.auth.uid;
+      allow update: if isSupervisor();
+      allow delete: if isSupervisor();
+    }
+  }
+}

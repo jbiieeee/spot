@@ -1,0 +1,92 @@
+import { useEffect, useState } from 'react';
+import Layout from '../components/Layout';
+import Modal from '../components/Modal';
+import { addItem, removeItem, subscribeCollection } from '../lib/dataSource';
+
+const fmt = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+
+export default function Schedules() {
+  const [schedules, setSchedules] = useState([]);
+  const [guards, setGuards] = useState([]);
+  const [sites, setSites] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ guardId: '', siteId: '', startTime: '', endTime: '' });
+
+  useEffect(() => {
+    const u1 = subscribeCollection('schedules', setSchedules);
+    const u2 = subscribeCollection('users', setGuards);
+    const u3 = subscribeCollection('sites', setSites);
+    return () => { u1(); u2(); u3(); };
+  }, []);
+
+  const save = async () => {
+    if (!form.guardId || !form.siteId || !form.startTime || !form.endTime) return;
+    await addItem('schedules', form);
+    setForm({ guardId: '', siteId: '', startTime: '', endTime: '' });
+    setOpen(false);
+  };
+
+  const guardMap = Object.fromEntries(guards.map((g) => [g.id, g.name]));
+  const siteMap = Object.fromEntries(sites.map((s) => [s.id, s.name]));
+
+  return (
+    <Layout
+      title="Schedules"
+      subtitle="Assign guards to sites and shifts"
+      actions={<button className="btn-primary" onClick={() => setOpen(true)}>New Schedule</button>}
+    >
+      <div className="card border-cyan-100 overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="th">Guard</th>
+              <th className="th">Site</th>
+              <th className="th">Start</th>
+              <th className="th">End</th>
+              <th className="th text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {schedules.map((s) => (
+              <tr key={s.id} className="transition-colors hover:bg-slate-50">
+                <td className="td font-medium text-slate-950">{guardMap[s.guardId] || '-'}</td>
+                <td className="td">{siteMap[s.siteId] || '-'}</td>
+                <td className="td">{fmt(s.startTime)}</td>
+                <td className="td">{fmt(s.endTime)}</td>
+                <td className="td text-right">
+                  <button className="text-xs font-medium text-rose-600 hover:text-rose-800" onClick={() => { if (confirm('Remove schedule?')) removeItem('schedules', s.id); }}>Delete</button>
+                </td>
+              </tr>
+            ))}
+            {schedules.length === 0 && <tr><td colSpan="5" className="td py-8 text-center text-slate-400">No schedules yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Create Schedule"
+        footer={<>
+          <button className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
+          <button className="btn-primary" onClick={save}>Save Schedule</button>
+        </>}
+      >
+        <label className="label">Guard</label>
+        <select className="input mb-3" value={form.guardId} onChange={(e) => setForm({ ...form, guardId: e.target.value })}>
+          <option value="">Select guard...</option>
+          {guards.filter((g) => g.role !== 'supervisor').map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
+        <label className="label">Site</label>
+        <select className="input mb-3" value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value })}>
+          <option value="">Select site...</option>
+          {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="label">Start</label><input className="input" type="datetime-local" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} /></div>
+          <div><label className="label">End</label><input className="input" type="datetime-local" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} /></div>
+        </div>
+      </Modal>
+    </Layout>
+  );
+}
