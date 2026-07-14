@@ -8,6 +8,8 @@ import RoutesPage from './pages/Routes';
 import Schedules from './pages/Schedules';
 import PatrolLogs from './pages/PatrolLogs';
 import Incidents from './pages/Incidents';
+import GuardTracking from './pages/GuardTracking';
+import Oversight from './pages/Oversight';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -34,6 +36,8 @@ export default function App() {
       <Route path="/schedules" element={<Schedules />} />
       <Route path="/logs" element={<PatrolLogs />} />
       <Route path="/incidents" element={<Incidents />} />
+      <Route path="/tracking" element={<GuardTracking />} />
+      <Route path="/oversight" element={<Oversight />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

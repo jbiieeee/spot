@@ -25,6 +25,14 @@ service cloud.firestore {
     match /checkpoints/{id} { allow read: if isAuthed(); allow write: if isSupervisor(); }
     match /routes/{id}      { allow read: if isAuthed(); allow write: if isSupervisor(); }
     match /schedules/{id}   { allow read: if isAuthed(); allow write: if isSupervisor(); }
+    match /guardLocations/{id}  { allow read: if isSupervisor(); allow write: if isAuthed(); }
+    match /locationHistory/{id} { allow read: if isSupervisor(); allow write: if isAuthed(); }
+    match /approvalRequests/{id} { allow read, write: if isSupervisor(); }
+    match /auditLogs/{id} {
+      allow read: if isSupervisor();
+      allow create: if isSupervisor();
+      allow update, delete: if false;
+    }
 
     // Patrol logs — guards create their own; supervisors read all
     match /patrolLogs/{id} {
@@ -37,6 +45,8 @@ service cloud.firestore {
     match /incidents/{id} {
       allow read:   if isAuthed() && (isSupervisor() || resource.data.guardId == request.auth.uid);
       allow create: if isAuthed() && request.resource.data.guardId == request.auth.uid;
+      // Production hard-enforcement should finalize report changes through
+      // a trusted Cloud Function after approvalRequests reaches 3 approvals.
       allow update: if isSupervisor();
       allow delete: if isSupervisor();
     }

@@ -10,7 +10,9 @@ const NAV = [
   { to: '/routes', label: 'Routes', icon: 'R', accent: 'bg-indigo-400', meta: 'Sequences' },
   { to: '/schedules', label: 'Schedules', icon: 'S', accent: 'bg-amber-400', meta: 'Shifts' },
   { to: '/logs', label: 'Patrol Logs', icon: 'L', accent: 'bg-teal-400', meta: 'Scans' },
-  { to: '/incidents', label: 'Incidents', icon: 'I', accent: 'bg-rose-400', meta: 'Alerts' }
+  { to: '/incidents', label: 'Incidents', icon: 'I', accent: 'bg-rose-400', meta: 'Alerts' },
+  { to: '/tracking', label: 'Tracking', icon: 'T', accent: 'bg-lime-400', meta: 'Location' },
+  { to: '/oversight', label: 'Oversight', icon: 'O', accent: 'bg-fuchsia-400', meta: 'Audit' }
 ];
 
 const emptyPasswords = { currentPassword: '', newPassword: '', confirmPassword: '' };
