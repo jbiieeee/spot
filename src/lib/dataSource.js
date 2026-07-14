@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db, hasFirebaseConfig } from './firebase';
 
 const noop = () => {};
@@ -17,6 +17,11 @@ export function subscribeCollection(name, cb) {
 export async function addItem(name, data) {
   const ref = await addDoc(collection(db, name), { ...data, createdAt: serverTimestamp() });
   return ref.id;
+}
+
+export async function setItem(name, id, data) {
+  await setDoc(doc(db, name, id), { ...data, createdAt: serverTimestamp() }, { merge: true });
+  return id;
 }
 
 export async function updateItem(name, id, patch) {

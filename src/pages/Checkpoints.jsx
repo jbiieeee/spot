@@ -37,7 +37,7 @@ export default function Checkpoints() {
     <Layout
       title="Checkpoints"
       subtitle="Physical patrol points with generated QR codes"
-      actions={<button className="btn-primary" onClick={() => setOpen(true)}>Add Checkpoint</button>}
+      actions={<button className="btn-create" onClick={() => setOpen(true)}><span className="btn-icon">+</span>Add Checkpoint</button>}
     >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {checkpoints.map((c) => (
@@ -67,29 +67,43 @@ export default function Checkpoints() {
         open={open}
         onClose={() => setOpen(false)}
         title="Add New Checkpoint"
+        eyebrow="Checkpoint Transaction"
+        description="Register a scan point and generate its unique QR identifier."
         footer={<>
           <button className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
-          <button className="btn-primary" onClick={save}>Create & Generate QR</button>
+          <button className="btn-create" onClick={save}><span className="btn-icon">+</span>Create QR Point</button>
         </>}
       >
-        <label className="label">Checkpoint Name</label>
-        <input className="input mb-3" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Lobby Entrance" />
-        <label className="label">Site</label>
-        <select className="input mb-3" value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value })}>
-          <option value="">Select a site...</option>
-          {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="label">Latitude</label><input className="input" value={form.lat} onChange={(e) => setForm({ ...form, lat: e.target.value })} placeholder="14.5547" /></div>
-          <div><label className="label">Longitude</label><input className="input" value={form.lng} onChange={(e) => setForm({ ...form, lng: e.target.value })} placeholder="121.0244" /></div>
+        <div className="mb-4 rounded-lg border border-cyan-100 bg-cyan-50/70 p-3">
+          <div className="text-sm font-semibold text-cyan-950">QR checkpoint identity</div>
+          <p className="mt-1 text-xs text-cyan-800">A unique code is generated after saving and can be printed from the checkpoint card.</p>
         </div>
-        <p className="mt-3 text-xs text-slate-500">A unique QR code will be auto-generated and printable from the checkpoint card.</p>
+
+        <div className="form-grid">
+          <div className="field">
+            <label className="label">Checkpoint Name</label>
+            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Lobby Entrance" />
+          </div>
+          <div className="field">
+            <label className="label">Site</label>
+            <select className="input" value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value })}>
+              <option value="">Select a site...</option>
+              {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="field"><label className="label">Latitude</label><input className="input" value={form.lat} onChange={(e) => setForm({ ...form, lat: e.target.value })} placeholder="14.5547" /></div>
+            <div className="field"><label className="label">Longitude</label><input className="input" value={form.lng} onChange={(e) => setForm({ ...form, lng: e.target.value })} placeholder="121.0244" /></div>
+          </div>
+        </div>
       </Modal>
 
       <Modal
         open={!!qrOpen}
         onClose={() => setQrOpen(null)}
         title={qrOpen?.name || 'Checkpoint QR'}
+        eyebrow="Printable QR"
+        description="Use this code at the physical checkpoint location."
         footer={<button className="btn-primary" onClick={() => window.print()}>Print</button>}
       >
         {qrOpen && (

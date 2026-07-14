@@ -33,7 +33,7 @@ export default function Schedules() {
     <Layout
       title="Schedules"
       subtitle="Assign guards to sites and shifts"
-      actions={<button className="btn-primary" onClick={() => setOpen(true)}>New Schedule</button>}
+      actions={<button className="btn-create" onClick={() => setOpen(true)}><span className="btn-icon">+</span>New Schedule</button>}
     >
       <div className="card border-cyan-100 overflow-x-auto">
         <table className="w-full">
@@ -67,24 +67,39 @@ export default function Schedules() {
         open={open}
         onClose={() => setOpen(false)}
         title="Create Schedule"
+        eyebrow="Shift Transaction"
+        description="Assign a guard to a site and define the active patrol window."
         footer={<>
           <button className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
-          <button className="btn-primary" onClick={save}>Save Schedule</button>
+          <button className="btn-create" onClick={save}><span className="btn-icon">+</span>Save Schedule</button>
         </>}
       >
-        <label className="label">Guard</label>
-        <select className="input mb-3" value={form.guardId} onChange={(e) => setForm({ ...form, guardId: e.target.value })}>
-          <option value="">Select guard...</option>
-          {guards.filter((g) => g.role !== 'supervisor').map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-        </select>
-        <label className="label">Site</label>
-        <select className="input mb-3" value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value })}>
-          <option value="">Select site...</option>
-          {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="label">Start</label><input className="input" type="datetime-local" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} /></div>
-          <div><label className="label">End</label><input className="input" type="datetime-local" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} /></div>
+        <div className="mb-4 rounded-lg border border-amber-100 bg-amber-50/70 p-3">
+          <div className="text-sm font-semibold text-amber-950">Shift assignment</div>
+          <p className="mt-1 text-xs text-amber-800">Schedules appear in realtime once saved and can be used by the guard app for assignments.</p>
+        </div>
+
+        <div className="form-grid">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="field">
+              <label className="label">Guard</label>
+              <select className="input" value={form.guardId} onChange={(e) => setForm({ ...form, guardId: e.target.value })}>
+                <option value="">Select guard...</option>
+                {guards.filter((g) => g.role !== 'supervisor').map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label className="label">Site</label>
+              <select className="input" value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value })}>
+                <option value="">Select site...</option>
+                {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="field"><label className="label">Start</label><input className="input" type="datetime-local" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} /></div>
+            <div className="field"><label className="label">End</label><input className="input" type="datetime-local" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} /></div>
+          </div>
         </div>
       </Modal>
     </Layout>

@@ -2,14 +2,50 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 const formatTime = (date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const ATTEMPT_KEY = 'spot.auth.attempts';
+const MAX_ATTEMPTS = 5;
+const WARNING_AT = 3;
+const LOCK_MS = 60 * 60 * 1000;
+
+const readAttemptState = () => {
+  try {
+    const raw = window.localStorage.getItem(ATTEMPT_KEY);
+    if (!raw) return { count: 0, lockedUntil: 0 };
+    const parsed = JSON.parse(raw);
+    if ((parsed.lockedUntil || 0) <= Date.now()) {
+      window.localStorage.removeItem(ATTEMPT_KEY);
+      return { count: 0, lockedUntil: 0 };
+    }
+    return { count: parsed.count || 0, lockedUntil: parsed.lockedUntil || 0 };
+  } catch {
+    return { count: 0, lockedUntil: 0 };
+  }
+};
+
+const saveAttemptState = (state) => {
+  window.localStorage.setItem(ATTEMPT_KEY, JSON.stringify(state));
+};
+
+const clearAttemptState = () => {
+  window.localStorage.removeItem(ATTEMPT_KEY);
+};
+
+const formatRemaining = (ms) => {
+  const minutes = Math.max(1, Math.ceil(ms / 60000));
+  if (minutes >= 60) return '1 hour';
+  return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+};
 
 export default function Login() {
   const { login, configError } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberDevice, setRememberDevice] = useState(true);
   const [error, setError] = useState('');
+  const [securityNotice, setSecurityNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [attemptState, setAttemptState] = useState(() => readAttemptState());
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 30000);
@@ -19,17 +55,47 @@ export default function Login() {
   const submit = async (e) => {
     e.preventDefault();
     setError('');
+    setSecurityNotice('');
+
+    const currentAttempts = readAttemptState();
+    if (currentAttempts.lockedUntil > Date.now()) {
+      const remaining = formatRemaining(currentAttempts.lockedUntil - Date.now());
+      setAttemptState(currentAttempts);
+      setError(`This device is locked for ${remaining}. Try again later.`);
+      return;
+    }
+
     setBusy(true);
     try {
-      await login(email, password);
+      await login(email, password, rememberDevice);
+      clearAttemptState();
+      setAttemptState({ count: 0, lockedUntil: 0 });
     } catch (err) {
-      setError(err.message || 'Login failed');
+      const nextCount = currentAttempts.count + 1;
+      if (nextCount >= MAX_ATTEMPTS) {
+        const lockedUntil = Date.now() + LOCK_MS;
+        const nextState = { count: nextCount, lockedUntil };
+        saveAttemptState(nextState);
+        setAttemptState(nextState);
+        setError('Too many failed attempts. This device is locked for 1 hour.');
+      } else {
+        const nextState = { count: nextCount, lockedUntil: 0 };
+        saveAttemptState(nextState);
+        setAttemptState(nextState);
+        const remaining = MAX_ATTEMPTS - nextCount;
+        setError(err.message || 'Login failed');
+        if (nextCount >= WARNING_AT) {
+          setSecurityNotice(`Warning: ${remaining} attempt${remaining === 1 ? '' : 's'} remaining before this device is locked for 1 hour.`);
+        }
+      }
     } finally {
       setBusy(false);
     }
   };
 
-  const signInDisabled = busy || !!configError;
+  const locked = attemptState.lockedUntil > now.getTime();
+  const signInDisabled = busy || !!configError || locked;
+  const remainingAttempts = Math.max(0, MAX_ATTEMPTS - attemptState.count);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 p-4 text-slate-900">
@@ -113,6 +179,26 @@ export default function Login() {
               <input className="input mb-4" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={signInDisabled} />
 
               {error && <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 p-2 text-sm text-rose-600">{error}</div>}
+              {securityNotice && <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{securityNotice}</div>}
+              {locked && (
+                <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">
+                  Device lock active. Try again in {formatRemaining(attemptState.lockedUntil - now.getTime())}.
+                </div>
+              )}
+
+              <label className="mb-4 flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                <input
+                  type="checkbox"
+                  checked={rememberDevice}
+                  onChange={(e) => setRememberDevice(e.target.checked)}
+                  disabled={busy}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-cyan-700 focus:ring-cyan-500"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-slate-800">Remember this device</span>
+                  <span className="block text-xs text-slate-500">Keep the supervisor session active on this browser.</span>
+                </span>
+              </label>
 
               <button type="submit" disabled={signInDisabled} className="btn-primary relative w-full justify-center overflow-hidden">
                 {busy && <span className="sign-in-progress absolute inset-y-0 left-0 w-2/3 bg-white/25" />}
@@ -125,7 +211,9 @@ export default function Login() {
               <div className="mt-5 grid grid-cols-3 gap-2 text-center text-[10px] uppercase text-slate-500">
                 <div className="rounded-md bg-slate-100 px-2 py-2">Auth</div>
                 <div className="rounded-md bg-cyan-50 px-2 py-2 text-cyan-800">Realtime</div>
-                <div className="rounded-md bg-emerald-50 px-2 py-2 text-emerald-700">Protected</div>
+                <div className={`rounded-md px-2 py-2 ${remainingAttempts <= 2 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                  {remainingAttempts}/{MAX_ATTEMPTS} Tries
+                </div>
               </div>
             </div>
           </form>

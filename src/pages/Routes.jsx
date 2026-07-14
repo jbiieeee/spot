@@ -41,7 +41,7 @@ export default function Routes() {
     <Layout
       title="Patrol Routes"
       subtitle="Ordered sequences of checkpoints guards must visit"
-      actions={<button className="btn-primary" onClick={() => setOpen(true)}>Create Route</button>}
+      actions={<button className="btn-create" onClick={() => setOpen(true)}><span className="btn-icon">+</span>Create Route</button>}
     >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {routes.map((r) => (
@@ -71,27 +71,48 @@ export default function Routes() {
         open={open}
         onClose={() => setOpen(false)}
         title="Create Patrol Route"
+        eyebrow="Route Transaction"
+        description="Build the ordered checkpoint sequence guards will follow during patrols."
+        size="xl"
         footer={<>
           <button className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
-          <button className="btn-primary" onClick={save}>Create Route</button>
+          <button className="btn-create" onClick={save}><span className="btn-icon">+</span>Create Route</button>
         </>}
       >
-        <label className="label">Route Name</label>
-        <input className="input mb-3" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Night Perimeter Sweep" />
-        <label className="label">Site</label>
-        <select className="input mb-3" value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value, checkpoints: [] })}>
-          <option value="">Select site...</option>
-          {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+        <div className="mb-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-indigo-100 bg-indigo-50/70 p-3">
+            <div className="text-sm font-semibold text-indigo-950">Route builder</div>
+            <p className="mt-1 text-xs text-indigo-800">Selected checkpoints are numbered in the order they are added.</p>
+          </div>
+          <div className="rounded-lg border border-cyan-100 bg-cyan-50/70 p-3">
+            <div className="text-sm font-semibold text-cyan-950">{form.checkpoints.length} selected</div>
+            <p className="mt-1 text-xs text-cyan-800">Choose at least one checkpoint to create the route.</p>
+          </div>
+        </div>
+
+        <div className="form-grid">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="field">
+              <label className="label">Route Name</label>
+              <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Night Perimeter Sweep" />
+            </div>
+            <div className="field">
+              <label className="label">Site</label>
+              <select className="input" value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value, checkpoints: [] })}>
+                <option value="">Select site...</option>
+                {sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          </div>
         {form.siteId && (
-          <>
+          <div className="field">
             <label className="label">Checkpoints in visit order</label>
-            <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-3">
+            <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border border-slate-200 bg-white p-2">
               {siteCheckpoints.length === 0 && <div className="text-xs text-slate-400">No checkpoints at this site yet.</div>}
               {siteCheckpoints.map((c) => {
                 const idx = form.checkpoints.indexOf(c.id);
                 return (
-                  <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-slate-50">
+                  <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 transition-colors hover:bg-cyan-50">
                     <input type="checkbox" checked={idx >= 0} onChange={() => toggleCp(c.id)} />
                     <span className="flex-1 text-sm">{c.name}</span>
                     {idx >= 0 && <span className="rounded-md bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-800 ring-1 ring-inset ring-cyan-100">#{idx + 1}</span>}
@@ -99,8 +120,9 @@ export default function Routes() {
                 );
               })}
             </div>
-          </>
+          </div>
         )}
+        </div>
       </Modal>
     </Layout>
   );
