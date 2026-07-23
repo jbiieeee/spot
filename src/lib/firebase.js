@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { deleteApp, initializeApp } from 'firebase/app';
 import { getAnalytics, isSupported as isAnalyticsSupported } from 'firebase/analytics';
 import { getAuth } from 'firebase/auth';
 import {
@@ -38,3 +38,16 @@ export const storage = getStorage(app);
 export const analyticsPromise = isAnalyticsSupported()
   .then((supported) => (supported && firebaseConfig.measurementId ? getAnalytics(app) : null))
   .catch(() => null);
+
+export function createIsolatedAuth() {
+  const isolatedApp = initializeApp(
+    firebaseConfig,
+    `spot-account-create-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
+
+  return {
+    app: isolatedApp,
+    auth: getAuth(isolatedApp),
+    dispose: () => deleteApp(isolatedApp)
+  };
+}

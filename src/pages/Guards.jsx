@@ -1,9 +1,26 @@
 import { useEffect, useState } from 'react';
+import { createUserWithEmailAndPassword, deleteUser, inMemoryPersistence, setPersistence, signOut, updateProfile } from 'firebase/auth';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
-import { addItem, removeItem, setItem, subscribeCollection, updateItem } from '../lib/dataSource';
+import { removeItem, setItem, subscribeCollection, updateItem } from '../lib/dataSource';
+import { createIsolatedAuth } from '../lib/firebase';
 
-const initialForm = { name: '', email: '', deviceId: '', active: true, role: 'guard', authUid: '' };
+const initialForm = { name: '', email: '', password: '', deviceId: '', active: true, role: 'guard' };
+
+const authErrorMessage = (err) => {
+  switch (err?.code) {
+    case 'auth/email-already-in-use':
+      return 'That email already has a Firebase account. Use another email or remove the old account first.';
+    case 'auth/invalid-email':
+      return 'Enter a valid email address.';
+    case 'auth/weak-password':
+      return 'Temporary password must be at least 6 characters.';
+    case 'permission-denied':
+      return 'The account was created, but this supervisor does not have permission to create the personnel profile.';
+    default:
+      return err?.message || 'Unable to create personnel account.';
+  }
+};
 
 export default function Guards() {
   const [users, setUsers] = useState([]);
@@ -11,6 +28,7 @@ export default function Guards() {
   const [form, setForm] = useState(initialForm);
   const [query, setQuery] = useState('');
   const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => subscribeCollection('users', setUsers), []);
 
@@ -21,32 +39,59 @@ export default function Guards() {
 
   const save = async () => {
     setFormError('');
+    if (saving) return;
+
     if (!form.name || !form.email) {
       setFormError('Name and email are required.');
       return;
     }
 
-    if (form.role === 'supervisor' && !form.authUid.trim()) {
-      setFormError('Supervisor profiles need the Firebase Auth UID so login can match users/{uid}.');
+    if (!form.password || form.password.length < 6) {
+      setFormError('Temporary password must be at least 6 characters.');
       return;
     }
 
     const payload = {
-      name: form.name,
-      email: form.email,
+      name: form.name.trim(),
+      email: form.email.trim(),
       role: form.role,
       active: form.active,
       deviceId: form.role === 'guard' ? (form.deviceId || null) : null
     };
 
-    if (form.authUid.trim()) {
-      await setItem('users', form.authUid.trim(), payload);
-    } else {
-      await addItem('users', payload);
-    }
+    const isolated = createIsolatedAuth();
+    let createdUser = null;
+    let profileSaved = false;
 
-    resetForm();
-    setOpen(false);
+    setSaving(true);
+    try {
+      await setPersistence(isolated.auth, inMemoryPersistence);
+      const credential = await createUserWithEmailAndPassword(isolated.auth, payload.email, form.password);
+      createdUser = credential.user;
+      await updateProfile(createdUser, { displayName: payload.name });
+      await setItem('users', createdUser.uid, payload);
+      profileSaved = true;
+      try {
+        await signOut(isolated.auth);
+      } catch {
+        // The isolated app is disposed below; a failed cleanup sign-out should not fail creation.
+      }
+
+      resetForm();
+      setOpen(false);
+    } catch (err) {
+      if (createdUser && !profileSaved) {
+        try {
+          await deleteUser(createdUser);
+        } catch {
+          // If cleanup fails, surface the original save error to the user.
+        }
+      }
+      setFormError(authErrorMessage(err));
+    } finally {
+      setSaving(false);
+      await isolated.dispose();
+    }
   };
 
   const toggle = async (g) => updateItem('users', g.id, { active: !g.active });
@@ -129,15 +174,17 @@ export default function Guards() {
         onClose={() => { setOpen(false); resetForm(); }}
         title="Add Personnel"
         eyebrow="Access Transaction"
-        description="Create a guard profile or register another supervisor profile for command center access."
+        description="Create the sign-in account and personnel profile in one step."
         footer={<>
-          <button className="btn-ghost" onClick={() => { setOpen(false); resetForm(); }}>Cancel</button>
-          <button className="btn-create" onClick={save}><span className="btn-icon">+</span>Create {form.role === 'supervisor' ? 'Supervisor' : 'Guard'}</button>
+          <button className="btn-ghost" onClick={() => { setOpen(false); resetForm(); }} disabled={saving}>Cancel</button>
+          <button className="btn-create" onClick={save} disabled={saving}>
+            <span className="btn-icon">+</span>{saving ? 'Creating...' : `Create ${form.role === 'supervisor' ? 'Supervisor' : 'Guard'}`}
+          </button>
         </>}
       >
         <div className="mb-4 rounded-lg border border-cyan-100 bg-cyan-50/70 p-3">
           <div className="text-sm font-semibold text-cyan-950">Personnel access profile</div>
-          <p className="mt-1 text-xs text-cyan-800">For supervisors, first create the Firebase Auth account, then paste that account UID here.</p>
+          <p className="mt-1 text-xs text-cyan-800">Personnel are added to sign-in access and the database automatically when saved.</p>
         </div>
 
         {formError && <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 p-2 text-sm text-rose-600">{formError}</div>}
@@ -151,6 +198,7 @@ export default function Guards() {
                   key={role}
                   type="button"
                   onClick={() => setForm({ ...form, role, deviceId: role === 'supervisor' ? '' : form.deviceId })}
+                  disabled={saving}
                   className={`rounded-md border px-3 py-2 text-sm font-medium capitalize transition-colors ${form.role === role ? 'border-cyan-500 bg-cyan-50 text-cyan-900' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
                 >
                   {role}
@@ -162,24 +210,24 @@ export default function Guards() {
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="field">
               <label className="label">Full Name</label>
-              <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Maria Santos" />
+              <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Maria Santos" disabled={saving} />
             </div>
             <div className="field">
               <label className="label">Email</label>
-              <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="person@company.com" />
+              <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="person@company.com" disabled={saving} />
             </div>
           </div>
 
           <div className="field">
-            <label className="label">Firebase Auth UID {form.role === 'supervisor' && <span className="text-rose-500">*</span>}</label>
-            <input className="input font-mono" value={form.authUid} onChange={(e) => setForm({ ...form, authUid: e.target.value })} placeholder="Paste UID from Firebase Authentication" />
-            <p className="field-hint">Using the UID creates the profile at <code className="rounded bg-slate-200 px-1">users/uid</code>, which login requires.</p>
+            <label className="label">Temporary Password</label>
+            <input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="At least 6 characters" disabled={saving} />
+            <p className="field-hint">The new user can change this after signing in.</p>
           </div>
 
           {form.role === 'guard' && (
             <div className="field">
               <label className="label">Initial Device ID <span className="font-normal text-slate-400">(optional)</span></label>
-              <input className="input" value={form.deviceId} onChange={(e) => setForm({ ...form, deviceId: e.target.value })} placeholder="Auto-set on first login" />
+              <input className="input" value={form.deviceId} onChange={(e) => setForm({ ...form, deviceId: e.target.value })} placeholder="Auto-set on first login" disabled={saving} />
             </div>
           )}
         </div>

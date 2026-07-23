@@ -107,7 +107,7 @@ export default function Login() {
         <section className="login-enter hidden text-white lg:block">
           <div className="mb-8 inline-flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-cyan-100 backdrop-blur">
             <span className="h-2 w-2 rounded-full bg-emerald-300 security-pulse" />
-            Secure Firebase Auth Gateway
+            Verified Command Access
           </div>
 
           <h1 className="max-w-xl text-4xl font-semibold leading-tight text-white">
