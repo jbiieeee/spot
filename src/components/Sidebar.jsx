@@ -5,11 +5,12 @@ import Modal from './Modal';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: 'D', accent: 'bg-cyan-400', meta: 'Overview' },
+  { to: '/sites', label: 'Sites', icon: 'S', accent: 'bg-purple-400', meta: 'Locations' },
   { to: '/guards', label: 'Personnel', icon: 'P', accent: 'bg-emerald-400', meta: 'Access' },
   { to: '/checkpoints', label: 'Checkpoints', icon: 'C', accent: 'bg-sky-400', meta: 'QR points' },
   { to: '/routes', label: 'Routes', icon: 'R', accent: 'bg-indigo-400', meta: 'Sequences' },
   { to: '/schedules', label: 'Schedules', icon: 'S', accent: 'bg-amber-400', meta: 'Shifts' },
-  { to: '/logs', label: 'Patrol Logs', icon: 'L', accent: 'bg-teal-400', meta: 'Scans' },
+  { to: '/logs', label: 'Admin Activity Logs', icon: 'A', accent: 'bg-teal-400', meta: 'Audit' },
   { to: '/incidents', label: 'Incidents', icon: 'I', accent: 'bg-rose-400', meta: 'Alerts' },
   { to: '/tracking', label: 'Tracking', icon: 'T', accent: 'bg-lime-400', meta: 'Location' },
   { to: '/oversight', label: 'Oversight', icon: 'O', accent: 'bg-fuchsia-400', meta: 'Audit' }

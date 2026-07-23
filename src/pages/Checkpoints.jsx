@@ -20,15 +20,17 @@ export default function Checkpoints() {
   const save = async () => {
     if (!form.name || !form.siteId) return;
     const qrCode = 'SPOT-CP-' + Math.random().toString(36).slice(2, 8).toUpperCase();
-    await addItem('checkpoints', {
+    const newItem = {
       name: form.name,
       siteId: form.siteId,
       qrCode,
       lat: parseFloat(form.lat) || 0,
       lng: parseFloat(form.lng) || 0
-    });
+    };
+    await addItem('checkpoints', newItem);
     setForm({ name: '', siteId: '', lat: '', lng: '' });
     setOpen(false);
+    setQrOpen(newItem);
   };
 
   const siteMap = Object.fromEntries(sites.map((s) => [s.id, s.name]));

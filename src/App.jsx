@@ -3,10 +3,11 @@ import { useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Guards from './pages/Guards';
+import Sites from './pages/Sites';
 import Checkpoints from './pages/Checkpoints';
 import RoutesPage from './pages/Routes';
 import Schedules from './pages/Schedules';
-import PatrolLogs from './pages/PatrolLogs';
+import AdminLogs from './pages/AdminLogs';
 import Incidents from './pages/Incidents';
 import GuardTracking from './pages/GuardTracking';
 import Oversight from './pages/Oversight';
@@ -31,10 +32,11 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Dashboard />} />
       <Route path="/guards" element={<Guards />} />
+      <Route path="/sites" element={<Sites />} />
       <Route path="/checkpoints" element={<Checkpoints />} />
       <Route path="/routes" element={<RoutesPage />} />
       <Route path="/schedules" element={<Schedules />} />
-      <Route path="/logs" element={<PatrolLogs />} />
+      <Route path="/logs" element={<AdminLogs />} />
       <Route path="/incidents" element={<Incidents />} />
       <Route path="/tracking" element={<GuardTracking />} />
       <Route path="/oversight" element={<Oversight />} />
