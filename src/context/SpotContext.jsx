@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { db, hasFirebaseConfig } from '../lib/firebase';
-import { subscribeCollection, updateItem, addItem } from '../lib/dataSource';
+import { subscribeCollection, updateItem, addItem, removeItem } from '../lib/dataSource';
 
 const SpotContext = createContext();
 
@@ -94,8 +94,9 @@ export function SpotProvider({ children }) {
         routesCount: doc.routesCount || 0,
         incidentsCount: doc.incidentsCount || 0,
         status: doc.status || 'Active',
-        lat: doc.lat || 14.5547,
-        lng: doc.lng || 121.0244,
+        // Preserve null so map knows there's no geocode yet
+        lat: doc.lat ?? null,
+        lng: doc.lng ?? null,
         image: doc.image || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=500&q=80'
       }));
       setSites(formatted);
@@ -168,6 +169,26 @@ export function SpotProvider({ children }) {
       setAuditLogs(formatted);
     });
 
+    // 6. Clients
+    const unsubClients = subscribeCollection('clients', (fsClients) => {
+      const formatted = (fsClients || []).map((doc) => ({
+        id: doc.id,
+        company: doc.company || doc.name || 'Client Organization',
+        contactPerson: doc.contactPerson || 'Contact Person',
+        email: doc.email || 'contact@client.com',
+        phone: doc.phone || 'N/A',
+        supervisor: doc.supervisor || 'Assigned Supervisor',
+        status: doc.status || 'Active',
+        deploymentsCount: doc.deploymentsCount || 0,
+        assignedGuards: doc.assignedGuards || 0,
+        slaCompliance: doc.slaCompliance || 100,
+        contractStart: doc.contractStart || '',
+        contractEnd: doc.contractEnd || '',
+        notes: doc.notes || ''
+      }));
+      setClients(formatted);
+    });
+
     setDbConnected(true);
 
     return () => {
@@ -176,11 +197,12 @@ export function SpotProvider({ children }) {
       unsubUsers();
       unsubPatrols();
       unsubAudit();
+      unsubClients();
     };
   }, []);
 
   // -------------------------------------------------------------
-  // Dynamic CRUD Handlers
+  // CRUD — Guards
   // -------------------------------------------------------------
   const addGuard = async (newGuard) => {
     const created = {
@@ -189,22 +211,22 @@ export function SpotProvider({ children }) {
       client: newGuard.client || 'Client Account',
       siteName: newGuard.siteName || 'Main Facility',
       shift: newGuard.shift || 'Day Shift (06:00 - 18:00)',
-      status: 'On Patrol',
+      status: 'Idle',
       battery: 100,
       gpsAccuracy: '1.2m (Excellent)',
       gpsLat: 14.5547 + (Math.random() - 0.5) * 0.01,
       gpsLng: 121.0244 + (Math.random() - 0.5) * 0.01,
-      faceVerified: true,
-      faceVerifiedAt: 'Just Now',
-      currentPatrolName: 'Standard Perimeter Patrol',
-      progressPct: 20,
-      completedCheckpoints: 1,
-      totalCheckpoints: 5,
-      etaMinutes: 25,
+      faceVerified: false,
+      faceVerifiedAt: 'Pending',
+      currentPatrolName: '',
+      progressPct: 0,
+      completedCheckpoints: 0,
+      totalCheckpoints: 0,
+      etaMinutes: 0,
       phone: newGuard.phone || '+63 917 000 0000',
       performanceRating: 100,
       attendanceRate: 100,
-      photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
+      photo: newGuard.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
       role: 'guard'
     };
 
@@ -217,9 +239,37 @@ export function SpotProvider({ children }) {
         console.warn('Firestore add user:', e);
       }
     }
-    addToast('Guard Registered', `${created.name} registered and deployed.`, 'success');
+    addToast('Guard Registered', `${created.name} has been added to the roster.`, 'success');
   };
 
+  const updateGuard = async (id, patch) => {
+    setGuards((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+    if (hasFirebaseConfig && db) {
+      try {
+        await updateItem('users', id, patch);
+      } catch (e) {
+        console.warn('Firestore update user:', e);
+      }
+    }
+    addToast('Guard Updated', `Guard record has been updated.`, 'info');
+  };
+
+  const deleteGuard = async (id) => {
+    const target = guards.find((g) => g.id === id);
+    setGuards((prev) => prev.filter((g) => g.id !== id));
+    if (hasFirebaseConfig && db) {
+      try {
+        await removeItem('users', id);
+      } catch (e) {
+        console.warn('Firestore delete user:', e);
+      }
+    }
+    addToast('Guard Removed', `${target?.name || 'Guard'} has been removed from the roster.`, 'danger');
+  };
+
+  // -------------------------------------------------------------
+  // CRUD — Sites
+  // -------------------------------------------------------------
   const addSite = async (newSite) => {
     const created = {
       id: `SITE-${Date.now().toString().slice(-4)}`,
@@ -228,13 +278,14 @@ export function SpotProvider({ children }) {
       client: newSite.client || 'Client Organization',
       address: newSite.address || 'Deployment Address',
       activeGuardsCount: 0,
-      checkpointsCount: 8,
-      routesCount: 2,
+      checkpointsCount: parseInt(newSite.checkpointsCount) || 0,
+      routesCount: 0,
       incidentsCount: 0,
-      status: 'Active',
-      lat: 14.5547,
-      lng: 121.0244,
-      image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=500&q=80'
+      status: newSite.status || 'Active',
+      // Preserve geocoded coordinates — null means no pin yet
+      lat: newSite.lat || null,
+      lng: newSite.lng || null,
+      image: newSite.image || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=500&q=80'
     };
 
     setSites((prev) => [created, ...prev]);
@@ -246,9 +297,94 @@ export function SpotProvider({ children }) {
         console.warn('Firestore add site:', e);
       }
     }
-    addToast('Site Added', `${created.name} added to site inventory.`, 'success');
+    addToast('Site Added', `${created.name} added to deployment inventory.`, 'success');
   };
 
+  const updateSite = async (id, patch) => {
+    setSites((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    if (hasFirebaseConfig && db) {
+      try {
+        await updateItem('sites', id, patch);
+      } catch (e) {
+        console.warn('Firestore update site:', e);
+      }
+    }
+    addToast('Site Updated', `Site record has been updated.`, 'info');
+  };
+
+  const deleteSite = async (id) => {
+    const target = sites.find((s) => s.id === id);
+    setSites((prev) => prev.filter((s) => s.id !== id));
+    if (hasFirebaseConfig && db) {
+      try {
+        await removeItem('sites', id);
+      } catch (e) {
+        console.warn('Firestore delete site:', e);
+      }
+    }
+    addToast('Site Removed', `${target?.name || 'Site'} has been removed.`, 'danger');
+  };
+
+  // -------------------------------------------------------------
+  // CRUD — Clients
+  // -------------------------------------------------------------
+  const addClient = async (newClient) => {
+    const created = {
+      id: `CLT-${Date.now().toString().slice(-4)}`,
+      company: newClient.company,
+      contactPerson: newClient.contactPerson || 'Contact Person',
+      email: newClient.email || 'contact@client.com',
+      phone: newClient.phone || 'N/A',
+      supervisor: newClient.supervisor || 'Unassigned',
+      status: newClient.status || 'Active',
+      deploymentsCount: 0,
+      assignedGuards: 0,
+      slaCompliance: 100,
+      contractStart: newClient.contractStart || '',
+      contractEnd: newClient.contractEnd || '',
+      notes: newClient.notes || ''
+    };
+
+    setClients((prev) => [created, ...prev]);
+
+    if (hasFirebaseConfig && db) {
+      try {
+        await addItem('clients', created);
+      } catch (e) {
+        console.warn('Firestore add client:', e);
+      }
+    }
+    addToast('Client Added', `${created.company} has been onboarded.`, 'success');
+  };
+
+  const updateClient = async (id, patch) => {
+    setClients((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+    if (hasFirebaseConfig && db) {
+      try {
+        await updateItem('clients', id, patch);
+      } catch (e) {
+        console.warn('Firestore update client:', e);
+      }
+    }
+    addToast('Client Updated', `Client record has been updated.`, 'info');
+  };
+
+  const deleteClient = async (id) => {
+    const target = clients.find((c) => c.id === id);
+    setClients((prev) => prev.filter((c) => c.id !== id));
+    if (hasFirebaseConfig && db) {
+      try {
+        await removeItem('clients', id);
+      } catch (e) {
+        console.warn('Firestore delete client:', e);
+      }
+    }
+    addToast('Client Removed', `${target?.company || 'Client'} has been removed.`, 'danger');
+  };
+
+  // -------------------------------------------------------------
+  // CRUD — Incidents
+  // -------------------------------------------------------------
   const addIncident = async (newInc) => {
     const created = {
       id: `INC-${Date.now().toString().slice(-4)}`,
@@ -273,9 +409,39 @@ export function SpotProvider({ children }) {
         console.warn('Firestore add incident:', e);
       }
     }
-    addToast('Incident Logged', `High priority incident ${created.id} submitted.`, 'danger');
+    addToast('Incident Logged', `Priority incident ${created.id} submitted.`, 'danger');
   };
 
+  const updateIncidentStatus = async (incidentId, newStatus) => {
+    setIncidents((prev) =>
+      prev.map((i) => (i.id === incidentId ? { ...i, status: newStatus } : i))
+    );
+
+    if (hasFirebaseConfig && db) {
+      try {
+        await updateItem('incidents', incidentId, { status: newStatus });
+      } catch (err) {
+        console.warn('Firestore update:', err);
+      }
+    }
+  };
+
+  const deleteIncident = async (id) => {
+    const target = incidents.find((i) => i.id === id);
+    setIncidents((prev) => prev.filter((i) => i.id !== id));
+    if (hasFirebaseConfig && db) {
+      try {
+        await removeItem('incidents', id);
+      } catch (e) {
+        console.warn('Firestore delete incident:', e);
+      }
+    }
+    addToast('Incident Removed', `Incident ${target?.id || id} has been deleted.`, 'danger');
+  };
+
+  // -------------------------------------------------------------
+  // CRUD — Patrols
+  // -------------------------------------------------------------
   const addPatrol = async (newPatrol) => {
     const created = {
       id: `PAT-${Date.now().toString().slice(-4)}`,
@@ -308,20 +474,6 @@ export function SpotProvider({ children }) {
       }
     }
     addToast('Patrol Initiated', `Route ${created.routeName} assigned.`, 'success');
-  };
-
-  const updateIncidentStatus = async (incidentId, newStatus) => {
-    setIncidents((prev) =>
-      prev.map((i) => (i.id === incidentId ? { ...i, status: newStatus } : i))
-    );
-
-    if (hasFirebaseConfig && db) {
-      try {
-        await updateItem('incidents', incidentId, { status: newStatus });
-      } catch (err) {
-        console.warn('Firestore update:', err);
-      }
-    }
   };
 
   // Compute stats dynamically from active DB datasets
@@ -379,11 +531,24 @@ export function SpotProvider({ children }) {
         toasts,
         addToast,
         removeToast,
-        updateIncidentStatus,
+        // Guards CRUD
         addGuard,
+        updateGuard,
+        deleteGuard,
+        // Sites CRUD
         addSite,
+        updateSite,
+        deleteSite,
+        // Clients CRUD
+        addClient,
+        updateClient,
+        deleteClient,
+        // Incidents CRUD
         addIncident,
-        addPatrol
+        updateIncidentStatus,
+        deleteIncident,
+        // Patrols
+        addPatrol,
       }}
     >
       {children}
