@@ -4,16 +4,23 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand: {
-          50:  '#eef4ff',
-          100: '#dbe6ff',
-          500: '#3b6cff',
-          600: '#2b57e6',
-          700: '#1f45b8',
-          900: '#0f2359'
+        spot: {
+          bg: '#0F172A',
+          sidebar: '#111827',
+          card: '#1E293B',
+          primary: '#2563EB',
+          success: '#22C55E',
+          warning: '#F59E0B',
+          danger: '#EF4444',
+          gray: '#64748B'
         }
+      },
+      borderRadius: {
+        'btn': '10px',
+        'card': '16px'
       }
     }
   },
   plugins: []
 };
+

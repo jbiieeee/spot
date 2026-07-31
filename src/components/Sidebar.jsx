@@ -1,235 +1,169 @@
-import { useEffect, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import React from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  Radio,
+  ShieldAlert,
+  Users,
+  Building2,
+  Briefcase,
+  CalendarDays,
+  AlertTriangle,
+  BarChart3,
+  FileSpreadsheet,
+  History,
+  Settings,
+  UserCheck,
+  ChevronLeft,
+  ChevronRight,
+  Shield,
+  LogOut
+} from 'lucide-react';
+import { useSpot } from '../context/SpotContext';
 import { useAuth } from '../context/AuthContext';
-import Modal from './Modal';
-
-const NAV = [
-  { to: '/', label: 'Dashboard', icon: 'D', accent: 'bg-cyan-400', meta: 'Overview' },
-  { to: '/sites', label: 'Sites', icon: 'S', accent: 'bg-purple-400', meta: 'Locations' },
-  { to: '/guards', label: 'Personnel', icon: 'P', accent: 'bg-emerald-400', meta: 'Access' },
-  { to: '/checkpoints', label: 'Checkpoints', icon: 'C', accent: 'bg-sky-400', meta: 'QR points' },
-  { to: '/routes', label: 'Routes', icon: 'R', accent: 'bg-indigo-400', meta: 'Sequences' },
-  { to: '/schedules', label: 'Schedules', icon: 'S', accent: 'bg-amber-400', meta: 'Shifts' },
-  { to: '/logs', label: 'Admin Activity Logs', icon: 'A', accent: 'bg-teal-400', meta: 'Audit' },
-  { to: '/incidents', label: 'Incidents', icon: 'I', accent: 'bg-rose-400', meta: 'Alerts' },
-  { to: '/tracking', label: 'Tracking', icon: 'T', accent: 'bg-lime-400', meta: 'Location' },
-  { to: '/oversight', label: 'Oversight', icon: 'O', accent: 'bg-fuchsia-400', meta: 'Audit' }
-];
-
-const emptyPasswords = { currentPassword: '', newPassword: '', confirmPassword: '' };
 
 export default function Sidebar() {
-  const { user, profile, logout, updateAccountProfile, changePassword } = useAuth();
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [displayName, setDisplayName] = useState(profile?.name || '');
-  const [passwords, setPasswords] = useState(emptyPasswords);
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState('');
-  const [error, setError] = useState('');
+  const { sidebarCollapsed, toggleSidebar } = useSpot();
+  const { logout, profile } = useAuth();
+  const location = useLocation();
 
-  useEffect(() => {
-    setDisplayName(profile?.name || '');
-  }, [profile?.name]);
-
-  const resetMessages = () => {
-    setNotice('');
-    setError('');
-  };
-
-  const saveProfile = async () => {
-    resetMessages();
-    setBusy(true);
-    try {
-      await updateAccountProfile({ name: displayName });
-      setNotice('Profile updated.');
-    } catch (err) {
-      setError(err.message || 'Unable to update profile.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const savePassword = async () => {
-    resetMessages();
-    if (passwords.newPassword !== passwords.confirmPassword) {
-      setError('New password and confirmation do not match.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      await changePassword(passwords);
-      setPasswords(emptyPasswords);
-      setNotice('Password changed successfully.');
-    } catch (err) {
-      setError(err.message || 'Unable to change password.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const closeProfile = () => {
-    setProfileOpen(false);
-    setPasswords(emptyPasswords);
-    resetMessages();
-  };
+  const navItems = [
+    { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+    { label: 'Live Monitoring', path: '/tracking', icon: Radio, badge: 'LIVE' },
+    { label: 'Patrol Operations', path: '/routes', icon: ShieldAlert },
+    { label: 'Guards', path: '/guards', icon: Users },
+    { label: 'Deployment Sites', path: '/sites', icon: Building2 },
+    { label: 'Clients', path: '/clients', icon: Briefcase },
+    { label: 'Schedules', path: '/schedules', icon: CalendarDays },
+    { label: 'Incidents', path: '/incidents', icon: AlertTriangle, badgeColor: 'bg-rose-500/20 text-rose-400' },
+    { label: 'Analytics', path: '/analytics', icon: BarChart3 },
+    { label: 'Reports', path: '/reports', icon: FileSpreadsheet },
+    { label: 'Audit Logs', path: '/logs', icon: History },
+    { label: 'Settings', path: '/settings', icon: Settings },
+    { label: 'Profile', path: '/profile', icon: UserCheck }
+  ];
 
   return (
-    <aside className="flex shrink-0 flex-col border-b border-cyan-950/30 bg-slate-950 text-white md:sticky md:top-0 md:h-screen md:w-[5.25rem] md:overflow-hidden md:border-b-0 md:border-r xl:w-64">
-      <div className="shrink-0 p-4 xl:p-5">
-        <div className="flex items-center justify-center gap-3 xl:justify-start">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-cyan-400 text-xs font-semibold text-slate-950">SP</div>
-          <div className="hidden min-w-0 xl:block">
-            <div className="text-lg font-semibold text-white">S.P.O.T.</div>
-            <div className="mt-0.5 text-xs text-slate-400">Security Patrol Operations & Tracking</div>
+    <aside
+      className={`relative z-40 flex flex-col border-r border-slate-800 bg-[#111827] text-slate-300 transition-all duration-300 ${
+        sidebarCollapsed ? 'w-20' : 'w-72'
+      }`}
+    >
+      {/* Brand Header */}
+      <div className="flex h-20 items-center justify-between border-b border-slate-800/80 px-4">
+        <div className="flex items-center gap-3 overflow-hidden">
+          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 shadow-lg shadow-blue-600/30">
+            <Shield className="h-6 w-6 text-white" />
+            <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
+            </span>
           </div>
+
+          {!sidebarCollapsed && (
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-bold tracking-wider text-white">S.P.O.T</span>
+                <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-blue-400 border border-blue-500/30">
+                  PRO
+                </span>
+              </div>
+              <span className="truncate text-xs font-medium text-slate-400">
+                Security Operations Tracker
+              </span>
+            </div>
+          )}
         </div>
-        <div className="mt-3 hidden items-center gap-2 rounded-md bg-emerald-400/10 px-2 py-1 text-[10px] font-semibold uppercase text-emerald-300 ring-1 ring-inset ring-emerald-400/20 xl:inline-flex">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 security-pulse" />
-          Live System
-        </div>
+
+        {/* Collapse Toggle Button */}
+        <button
+          onClick={toggleSidebar}
+          className="hidden md:flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/80 text-slate-400 transition hover:bg-slate-700 hover:text-white"
+          title={sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+        >
+          {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </button>
       </div>
 
-      <nav className="scroll-invisible flex gap-1 overflow-x-auto px-3 pb-4 md:min-h-0 md:flex-1 md:flex-col md:overflow-y-auto md:overflow-x-hidden md:px-3 md:py-2">
-        {NAV.map((n) => (
-          <NavLink
-            key={n.to}
-            to={n.to}
-            end={n.to === '/'}
-            title={n.label}
-            className={({ isActive }) =>
-              `group relative flex shrink-0 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors md:justify-center xl:justify-start ${
-                isActive ? 'bg-white text-slate-950' : 'text-slate-300 hover:bg-cyan-900/30 hover:text-white'
-              }`
-            }
-          >
-            <span className={`absolute left-2 top-1/2 h-2 w-2 -translate-y-1/2 rounded-sm ${n.accent} xl:static xl:translate-y-0`} />
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded border border-current/20 bg-white/5 text-[10px] font-semibold">{n.icon}</span>
-            <span className="min-w-0 md:hidden xl:block">
-              <span className="block truncate">{n.label}</span>
-              <span className="hidden text-[10px] font-normal text-slate-500 group-hover:text-cyan-100 xl:block">{n.meta}</span>
-            </span>
-          </NavLink>
-        ))}
+      {/* Navigation List */}
+      <nav className="custom-scrollbar flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = location.pathname === item.path;
+
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) =>
+                `group relative flex items-center gap-3.5 rounded-[10px] px-3.5 py-3 text-sm font-medium transition-all duration-150 ${
+                  isActive
+                    ? 'bg-[#2563EB] text-white shadow-lg shadow-blue-600/25 border border-blue-500/40'
+                    : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-100'
+                }`
+              }
+              title={sidebarCollapsed ? item.label : undefined}
+            >
+              <Icon
+                className={`h-5 w-5 shrink-0 transition-transform duration-200 group-hover:scale-110 ${
+                  isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-200'
+                }`}
+              />
+
+              {!sidebarCollapsed && (
+                <span className="flex-1 truncate tracking-tight">{item.label}</span>
+              )}
+
+              {!sidebarCollapsed && item.badge && (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wider ${
+                    item.badgeColor || 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  }`}
+                >
+                  {item.badge}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
       </nav>
 
-      <div className="hidden shrink-0 border-t border-white/10 p-3 md:block xl:p-4">
-        <div className="mb-4 hidden rounded-lg border border-cyan-400/20 bg-cyan-400/10 p-3 xl:block">
-          <div className="mb-2 flex items-center justify-between text-[10px] uppercase text-cyan-100">
-            <span>System Load</span>
-            <span>Nominal</span>
-          </div>
-          <div className="h-1.5 overflow-hidden rounded bg-white/10">
-            <div className="h-full w-2/3 rounded bg-cyan-300" />
-          </div>
-        </div>
+      {/* Sidebar Footer / Supervisor Profile */}
+      <div className="border-t border-slate-800/80 p-3">
+        {!sidebarCollapsed ? (
+          <div className="flex items-center justify-between rounded-[12px] border border-slate-800 bg-slate-900/60 p-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-9 w-9 rounded-full bg-slate-700 flex items-center justify-center font-bold text-white text-sm border border-slate-600">
+                {profile?.name ? profile.name.charAt(0) : 'S'}
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="truncate text-xs font-semibold text-white">
+                  {profile?.name || 'Supervisor Admin'}
+                </span>
+                <span className="truncate text-[11px] text-slate-400">
+                  {profile?.role || 'Command Officer'}
+                </span>
+              </div>
+            </div>
 
-        <button
-          type="button"
-          onClick={() => setProfileOpen(true)}
-          title="Profile settings"
-          className="mb-2 flex w-full items-center justify-center gap-2 rounded-md border border-white/10 px-3 py-2 text-left transition-colors hover:border-cyan-400/50 hover:bg-cyan-400/10 xl:justify-start"
-        >
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded bg-cyan-400 text-xs font-semibold text-slate-950">
-            {(profile?.name || user?.email || 'S')[0]?.toUpperCase()}
-          </span>
-          <span className="hidden min-w-0 xl:block">
-            <span className="block truncate text-sm font-medium text-white">{profile?.name || 'Supervisor'}</span>
-            <span className="block truncate text-xs capitalize text-slate-400">{profile?.role || 'supervisor'}</span>
-          </span>
-        </button>
-
-        <button
-          onClick={logout}
-          title="Sign out"
-          className="grid w-full place-items-center rounded-md border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:border-cyan-400/50 hover:bg-cyan-400/10 hover:text-white xl:block"
-        >
-          <span className="xl:hidden">SO</span>
-          <span className="hidden xl:inline">Sign out</span>
-        </button>
-      </div>
-
-      <Modal
-        open={profileOpen}
-        onClose={closeProfile}
-        title="Profile Settings"
-        eyebrow="Account"
-        description="Manage your supervisor profile, password, and current session."
-        size="xl"
-        footer={<>
-          <button className="btn-ghost" onClick={closeProfile}>Close</button>
-          <button className="btn-primary" onClick={logout}>Sign out</button>
-        </>}
-      >
-        {(notice || error) && (
-          <div className={`mb-4 rounded-md border p-3 text-sm ${error ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
-            {error || notice}
+            <button
+              onClick={logout}
+              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-500/20 hover:text-rose-400"
+              title="Logout"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
+        ) : (
+          <button
+            onClick={logout}
+            className="flex h-11 w-full items-center justify-center rounded-[10px] border border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-rose-500/20 hover:text-rose-400"
+            title="Logout"
+          >
+            <LogOut className="h-5 w-5" />
+          </button>
         )}
-
-        <div className="grid gap-4 lg:grid-cols-[1fr_1.15fr]">
-          <section className="rounded-lg border border-cyan-100 bg-cyan-50/70 p-4">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-lg bg-cyan-700 text-sm font-semibold text-white">
-                {(profile?.name || user?.email || 'S')[0]?.toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <div className="truncate font-semibold text-slate-950">{profile?.name || 'Supervisor'}</div>
-                <div className="truncate text-xs text-slate-500">{user?.email}</div>
-              </div>
-            </div>
-
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between gap-3 rounded-md bg-white/70 px-3 py-2">
-                <span className="text-slate-500">Role</span>
-                <span className="font-medium capitalize text-slate-900">{profile?.role || 'supervisor'}</span>
-              </div>
-              <div className="flex justify-between gap-3 rounded-md bg-white/70 px-3 py-2">
-                <span className="text-slate-500">User ID</span>
-                <span className="truncate font-mono text-xs text-slate-700">{user?.uid}</span>
-              </div>
-            </div>
-          </section>
-
-          <section className="form-grid">
-            <div className="field">
-              <label className="label">Display Name</label>
-              <input className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-              <p className="field-hint">This updates your command center profile record.</p>
-              <button className="btn-primary mt-3" onClick={saveProfile} disabled={busy}>Save Profile</button>
-            </div>
-
-            <div className="field">
-              <label className="label">Change Password</label>
-              <input
-                className="input mb-3"
-                type="password"
-                value={passwords.currentPassword}
-                onChange={(e) => setPasswords({ ...passwords, currentPassword: e.target.value })}
-                placeholder="Current password"
-              />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <input
-                  className="input"
-                  type="password"
-                  value={passwords.newPassword}
-                  onChange={(e) => setPasswords({ ...passwords, newPassword: e.target.value })}
-                  placeholder="New password"
-                />
-                <input
-                  className="input"
-                  type="password"
-                  value={passwords.confirmPassword}
-                  onChange={(e) => setPasswords({ ...passwords, confirmPassword: e.target.value })}
-                  placeholder="Confirm new password"
-                />
-              </div>
-              <p className="field-hint">Firebase requires your current password before applying a new one.</p>
-              <button className="btn-primary mt-3" onClick={savePassword} disabled={busy}>Update Password</button>
-            </div>
-          </section>
-        </div>
-      </Modal>
+      </div>
     </aside>
   );
 }

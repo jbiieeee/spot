@@ -1,59 +1,191 @@
-import { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import React, { useEffect, useState } from 'react';
+import { useLocation, Link } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import GlobalSearchModal from './GlobalSearchModal';
+import GuardDetailDrawer from './GuardDetailDrawer';
+import ToastContainer from './ToastContainer';
+import { useSpot } from '../context/SpotContext';
+import { useAuth } from '../context/AuthContext';
+import {
+  Search,
+  Bell,
+  Clock,
+  Radio,
+  MessageSquare,
+  ChevronRight,
+  Shield,
+  UserCheck,
+  CheckCircle,
+  AlertTriangle,
+  X
+} from 'lucide-react';
 
-const formatClock = (date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-const formatDate = (date) => date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+const formatClock = (date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const formatDate = (date) => date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
 export default function Layout({ children, title, subtitle, actions }) {
+  const { setGlobalSearchOpen, liveEvents, addToast } = useSpot();
   const { profile } = useAuth();
   const [now, setNow] = useState(() => new Date());
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), 30000);
-    return () => window.clearInterval(id);
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
+  // Compute breadcrumb trail label based on current route
+  const getBreadcrumb = () => {
+    const path = location.pathname;
+    if (path === '/') return 'Command Center / Dashboard';
+    if (path === '/tracking') return 'Command Center / Live Monitoring';
+    if (path === '/routes') return 'Command Center / Patrol Operations';
+    if (path === '/guards') return 'Command Center / Guards Directory';
+    if (path === '/sites') return 'Command Center / Deployment Sites';
+    if (path === '/clients') return 'Command Center / Client Accounts';
+    if (path === '/schedules') return 'Command Center / Duty Schedules';
+    if (path === '/incidents') return 'Command Center / Incident Center';
+    if (path === '/analytics') return 'Command Center / Operational Analytics';
+    if (path === '/reports') return 'Command Center / Executive Reports';
+    if (path === '/logs') return 'Command Center / Security Audit Logs';
+    if (path === '/settings') return 'Command Center / System Settings';
+    if (path === '/profile') return 'Command Center / Supervisor Profile';
+    return 'Command Center';
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 md:flex md:h-screen md:overflow-hidden">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#0F172A] text-slate-100 selection:bg-blue-600 selection:text-white">
+      {/* Left Collapsible Navigation Sidebar */}
       <Sidebar />
-      <main className="scroll-invisible min-w-0 flex-1 md:h-screen md:overflow-y-auto">
-        <header className="sticky top-0 z-30 border-b border-cyan-100 bg-white/95 px-4 py-5 shadow-[inset_0_-1px_0_rgba(14,116,144,0.06)] backdrop-blur sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
-              <div className="mb-2 flex gap-1.5">
-                <span className="h-1 w-8 rounded bg-cyan-600" />
-                <span className="h-1 w-3 rounded bg-emerald-500" />
-                <span className="h-1 w-3 rounded bg-amber-400" />
+
+      {/* Main Content Body */}
+      <div className="flex flex-1 flex-col min-w-0 h-full overflow-hidden">
+        {/* Top Header Navigation */}
+        <header className="relative z-30 flex h-20 shrink-0 items-center justify-between border-b border-slate-800 bg-[#111827]/90 px-6 backdrop-blur-md">
+          {/* Left: Breadcrumbs & Page Titles */}
+          <div className="flex flex-col">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+              <Shield className="h-3.5 w-3.5 text-blue-500" />
+              <span>{getBreadcrumb()}</span>
+            </div>
+            <h1 className="text-xl font-bold text-white tracking-tight">{title}</h1>
+          </div>
+
+          {/* Center: Global Search Input Button */}
+          <div className="hidden md:flex flex-1 max-w-md mx-8">
+            <button
+              onClick={() => setGlobalSearchOpen(true)}
+              className="w-full flex items-center justify-between rounded-[10px] border border-slate-700/80 bg-slate-900/90 px-4 py-2 text-xs text-slate-400 hover:border-slate-600 hover:bg-slate-800 transition"
+            >
+              <div className="flex items-center gap-2.5">
+                <Search className="h-4 w-4 text-slate-400" />
+                <span>Search Guard... Site... Incident...</span>
               </div>
-              <h1 className="text-xl font-semibold text-slate-950">{title}</h1>
-              {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
+              <span className="rounded bg-slate-800 px-2 py-0.5 font-mono text-[10px] text-slate-400 border border-slate-700">
+                Ctrl + K
+              </span>
+            </button>
+          </div>
+
+          {/* Right: Live Ticker, Notifications & User */}
+          <div className="flex items-center gap-4">
+            {/* Live Clock & Status */}
+            <div className="hidden lg:flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/60 px-3.5 py-1.5 text-xs">
+              <div className="flex items-center gap-2 border-r border-slate-800 pr-3">
+                <Clock className="h-3.5 w-3.5 text-blue-400" />
+                <div className="flex flex-col">
+                  <span className="font-mono font-bold text-white leading-none">{formatClock(now)}</span>
+                  <span className="text-[10px] text-slate-400 mt-0.5">{formatDate(now)}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                </span>
+                <span className="font-semibold text-emerald-400">Telemetry Live</span>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 text-xs">
-                <div className="border-r border-slate-200 px-3 py-2">
-                  <div className="font-semibold text-slate-950">{formatClock(now)}</div>
-                  <div className="text-slate-500">{formatDate(now)}</div>
-                </div>
-                <div className="border-r border-slate-200 px-3 py-2">
-                  <div className="flex items-center gap-1.5 font-semibold text-emerald-700">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 security-pulse" />
-                    Live
+            {/* Notifications Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setNotificationsOpen((prev) => !prev)}
+                className="relative rounded-xl border border-slate-700/80 bg-slate-800/80 p-2.5 text-slate-300 hover:border-slate-600 hover:bg-slate-700 hover:text-white transition"
+                title="Notifications Alert Center"
+              >
+                <Bell className="h-5 w-5" />
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white">
+                  3
+                </span>
+              </button>
+
+              {notificationsOpen && (
+                <div className="absolute right-0 mt-3 w-80 rounded-2xl border border-slate-700 bg-[#1E293B] p-4 shadow-2xl shadow-slate-950 z-50">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Live Alerts</span>
+                    <button
+                      onClick={() => setNotificationsOpen(false)}
+                      className="text-slate-400 hover:text-white"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
-                  <div className="text-slate-500">Realtime</div>
+                  <div className="mt-3 space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                    {liveEvents.slice(0, 4).map((ev) => (
+                      <div key={ev.id} className="flex items-start gap-2.5 p-2 rounded-xl bg-slate-900/60 text-xs border border-slate-800">
+                        <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-medium text-white">{ev.text}</div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">{ev.time}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 border-t border-slate-800 pt-2 text-center">
+                    <Link
+                      to="/incidents"
+                      onClick={() => setNotificationsOpen(false)}
+                      className="text-xs font-semibold text-blue-400 hover:underline"
+                    >
+                      View All Incidents →
+                    </Link>
+                  </div>
                 </div>
-                <div className="px-3 py-2">
-                  <div className="truncate font-semibold text-slate-950">{profile?.name || 'Supervisor'}</div>
-                  <div className="capitalize text-slate-500">{profile?.role || 'operator'}</div>
-                </div>
-              </div>
-              {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+              )}
             </div>
+
+            {/* Profile Avatar Quick Info */}
+            <Link
+              to="/profile"
+              className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-1.5 pr-3 hover:border-slate-700 transition"
+            >
+              <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white text-xs shadow-md">
+                {profile?.name ? profile.name.charAt(0) : 'S'}
+              </div>
+              <div className="hidden sm:flex flex-col">
+                <span className="text-xs font-semibold text-white leading-tight">
+                  {profile?.name || 'Supervisor Admin'}
+                </span>
+                <span className="text-[10px] text-slate-400">Command HQ</span>
+              </div>
+            </Link>
+
+            {actions && <div className="flex items-center gap-2">{actions}</div>}
           </div>
         </header>
-        <div className="px-4 py-6 pb-10 sm:px-6 lg:px-8">{children}</div>
-      </main>
+
+        {/* Page Content Scroll View */}
+        <main className="custom-scrollbar flex-1 overflow-y-auto p-6 lg:p-8">
+          {children}
+        </main>
+      </div>
+
+      {/* Global Overlays */}
+      <GlobalSearchModal />
+      <GuardDetailDrawer />
+      <ToastContainer />
     </div>
   );
 }

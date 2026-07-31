@@ -1,106 +1,95 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import Layout from '../components/Layout';
-import { subscribeCollection } from '../lib/dataSource';
-
-const fmt = (ts) => new Date(ts).toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' });
+import { useSpot } from '../context/SpotContext';
+import { History, Search, ShieldCheck, Filter, Terminal } from 'lucide-react';
 
 export default function AdminLogs() {
-  const [logs, setLogs] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [filterUser, setFilterUser] = useState('');
-  const [filterAction, setFilterAction] = useState('');
+  const { auditLogs } = useSpot();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All');
 
-  useEffect(() => {
-    const u1 = subscribeCollection('adminLogs', setLogs);
-    const u2 = subscribeCollection('users', setUsers);
-    return () => { u1(); u2(); };
-  }, []);
-
-  const userMap = Object.fromEntries(users.map((u) => [u.id, u.name || u.email]));
-
-  const filtered = useMemo(() => {
-    return [...logs]
-      .filter((l) => !filterUser || l.userId === filterUser)
-      .filter((l) => !filterAction || l.action === filterAction)
-      .sort((a, b) => b.timestamp - a.timestamp);
-  }, [logs, filterUser, filterAction]);
-
-  const exportCSV = () => {
-    const rows = [['Timestamp', 'User', 'Action', 'Target Collection', 'Target ID', 'Details']];
-    filtered.forEach((l) => rows.push([
-      fmt(l.timestamp), 
-      userMap[l.userId] || l.userId || 'System', 
-      l.action, 
-      l.collection,
-      l.targetId,
-      JSON.stringify(l.details || {})
-    ]));
-    const csv = rows.map((r) => r.map((c) => `"${(c || '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `admin-logs-${Date.now()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const actions = [...new Set(logs.map(l => l.action))];
+  const filteredLogs = auditLogs.filter((log) => {
+    const matchesSearch =
+      log.actor.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      log.details.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = categoryFilter === 'All' || log.category === categoryFilter;
+    return matchesSearch && matchesCategory;
+  });
 
   return (
     <Layout
-      title="Admin Activity Logs"
-      subtitle="System audit trail of administrative actions"
-      actions={<button className="btn-ghost" onClick={exportCSV}>Export CSV</button>}
+      title="Security Operations Audit & Telemetry Logs"
+      subtitle="Searchable Audit Trail of All System Actions, Biometric Verifications & DB Sync Events"
     >
-      <div className="card mb-4 flex flex-wrap gap-3 border-cyan-100 bg-cyan-50/30 p-4">
-        <select className="input max-w-xs" value={filterUser} onChange={(e) => setFilterUser(e.target.value)}>
-          <option value="">All users</option>
-          {users.map((u) => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
-        </select>
-        <select className="input max-w-xs" value={filterAction} onChange={(e) => setFilterAction(e.target.value)}>
-          <option value="">All actions</option>
-          {actions.map((a) => <option key={a} value={a}>{a}</option>)}
-        </select>
-        <div className="self-center text-sm text-slate-500 sm:ml-auto">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</div>
-      </div>
+      <div className="space-y-6">
+        {/* Controls */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 card-spot p-4">
+          <div className="relative flex-1 w-full max-w-md">
+            <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search audit trail by actor, event, or details..."
+              className="input-spot pl-10"
+            />
+          </div>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="th">Timestamp</th>
-              <th className="th">User</th>
-              <th className="th">Action</th>
-              <th className="th">Target</th>
-              <th className="th">Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((l) => (
-              <tr key={l.id} className="transition-colors hover:bg-slate-50">
-                <td className="td whitespace-nowrap font-mono text-xs">{fmt(l.timestamp)}</td>
-                <td className="td font-medium text-slate-950">{userMap[l.userId] || l.userId || 'System'}</td>
-                <td className="td">
-                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                    l.action === 'CREATE' ? 'bg-emerald-100 text-emerald-800' :
-                    l.action === 'UPDATE' ? 'bg-amber-100 text-amber-800' :
-                    l.action === 'DELETE' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-800'
-                  }`}>
-                    {l.action}
-                  </span>
-                </td>
-                <td className="td text-xs text-slate-600">
-                  <span className="font-semibold">{l.collection}</span> ({l.targetId})
-                </td>
-                <td className="td font-mono text-[10px] text-slate-500 max-w-xs truncate" title={JSON.stringify(l.details)}>
-                  {JSON.stringify(l.details)}
-                </td>
-              </tr>
+          <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs overflow-x-auto custom-scrollbar">
+            {['All', 'Verification', 'System Change', 'Login', 'Synchronization'].map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setCategoryFilter(cat)}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition shrink-0 ${
+                  categoryFilter === cat ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {cat}
+              </button>
             ))}
-            {filtered.length === 0 && <tr><td colSpan="5" className="td py-8 text-center text-slate-400">No logs match your filter.</td></tr>}
-          </tbody>
-        </table>
+          </div>
+        </div>
+
+        {/* Audit Logs Table */}
+        <div className="card-spot p-0 overflow-hidden border border-slate-800">
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-left text-xs text-slate-300">
+              <thead className="bg-slate-900/90 uppercase tracking-wider text-slate-400 border-b border-slate-800">
+                <tr>
+                  <th className="px-6 py-4">Timestamp</th>
+                  <th className="px-6 py-4">Actor</th>
+                  <th className="px-6 py-4">Category</th>
+                  <th className="px-6 py-4">Action Summary</th>
+                  <th className="px-6 py-4">Telemetry Details</th>
+                  <th className="px-6 py-4">IP / Endpoint</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/80">
+                {filteredLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-slate-800/40 transition">
+                    <td className="px-6 py-4 font-mono text-slate-400 whitespace-nowrap">{log.timestamp}</td>
+                    <td className="px-6 py-4 font-bold text-white whitespace-nowrap">{log.actor}</td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                          log.severity === 'Critical'
+                            ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                            : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                        }`}
+                      >
+                        {log.category}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-semibold text-slate-200">{log.action}</td>
+                    <td className="px-6 py-4 text-slate-400 font-mono text-[11px]">{log.details}</td>
+                    <td className="px-6 py-4 text-slate-500 font-mono text-[11px]">{log.ipAddress}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </Layout>
   );

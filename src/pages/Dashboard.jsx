@@ -1,223 +1,330 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import Layout from '../components/Layout';
-import { subscribeCollection } from '../lib/dataSource';
+import { useSpot } from '../context/SpotContext';
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import {
+  Users,
+  ShieldAlert,
+  CalendarCheck,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  WifiOff,
+  Activity,
+  Filter,
+  BarChart3,
+  TrendingUp,
+  MapPin,
+  QrCode,
+  ShieldCheck,
+  Play,
+  Maximize2
+} from 'lucide-react';
 
-function Stat({ label, value, sub, tone = 'slate' }) {
-  const tones = {
-    slate: 'bg-cyan-700',
-    emerald: 'bg-emerald-500',
-    amber: 'bg-amber-500',
-    rose: 'bg-rose-500'
-  };
-  const panels = {
-    slate: 'border-cyan-200 bg-cyan-50/40',
-    emerald: 'border-emerald-200 bg-emerald-50/40',
-    amber: 'border-amber-200 bg-amber-50/40',
-    rose: 'border-rose-200 bg-rose-50/40'
-  };
+// Custom Leaflet marker icons with pulse rings
+const createGuardMarker = (status, initial) => {
+  let colorClass = 'bg-blue-600 border-blue-400';
+  if (status === 'Emergency') colorClass = 'bg-rose-600 border-rose-400 emergency-flash';
+  if (status === 'Idle') colorClass = 'bg-slate-600 border-slate-400';
 
-  return (
-    <div className={`card p-5 ${panels[tone]}`}>
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="text-xs font-semibold uppercase text-slate-500">{label}</div>
-          <div className="mt-2 text-3xl font-semibold text-slate-950">{value}</div>
-        </div>
-        <span className={`h-2.5 w-2.5 rounded-sm ${tones[tone]}`} />
-      </div>
-      {sub && <div className="mt-2 text-xs text-slate-500">{sub}</div>}
-    </div>
-  );
-}
-
-function OperationsPanel({ activeGuards, totalGuards, todaysLogs, openIncidents, checkpoints, sites }) {
-  const guardCoverage = totalGuards ? Math.round((activeGuards / totalGuards) * 100) : 0;
-  const checkpointCoverage = checkpoints ? Math.min(100, Math.round((todaysLogs / Math.max(checkpoints, 1)) * 100)) : 0;
-  const risk = openIncidents > 0 ? 'Elevated' : 'Nominal';
-
-  return (
-    <div className="card overflow-hidden border-cyan-100">
-      <div className="border-b border-slate-200 bg-slate-950 px-5 py-4 text-white">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h3 className="font-semibold">Operations Health</h3>
-            <p className="text-xs text-slate-400">Live readiness and patrol coverage</p>
-          </div>
-          <span className={`rounded-md px-2 py-1 text-xs font-semibold ${openIncidents > 0 ? 'bg-rose-400/15 text-rose-200 ring-1 ring-rose-300/20' : 'bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-300/20'}`}>
-            {risk}
-          </span>
-        </div>
-      </div>
-
-      <div className="space-y-4 p-5">
-        <ProgressRow label="Guard coverage" value={guardCoverage} tone="emerald" />
-        <ProgressRow label="Checkpoint activity" value={checkpointCoverage} tone="cyan" />
-        <div className="grid grid-cols-3 gap-3 pt-1 text-center">
-          <MiniMetric label="Sites" value={sites} />
-          <MiniMetric label="Points" value={checkpoints} />
-          <MiniMetric label="Alerts" value={openIncidents} alert={openIncidents > 0} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ProgressRow({ label, value, tone }) {
-  const color = tone === 'emerald' ? 'bg-emerald-500' : 'bg-cyan-500';
-
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between text-xs">
-        <span className="font-medium text-slate-600">{label}</span>
-        <span className="font-semibold text-slate-950">{value}%</span>
-      </div>
-      <div className="h-2 overflow-hidden rounded bg-slate-100">
-        <div className={`h-full rounded ${color} transition-all`} style={{ width: `${value}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function MiniMetric({ label, value, alert = false }) {
-  return (
-    <div className={`rounded-lg border px-3 py-3 ${alert ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-      <div className="text-lg font-semibold">{value}</div>
-      <div className="text-[10px] uppercase">{label}</div>
-    </div>
-  );
-}
-
-const toMillis = (value) => {
-  if (!value) return 0;
-  if (typeof value === 'number') return value;
-  if (value instanceof Date) return value.getTime();
-  if (typeof value.toMillis === 'function') return value.toMillis();
-  if (typeof value.seconds === 'number') return value.seconds * 1000;
-  return Number(value) || 0;
-};
-
-const timeAgo = (ts) => {
-  const s = Math.max(0, Math.floor((Date.now() - toMillis(ts)) / 1000));
-  if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  return `${Math.floor(s / 3600)}h ago`;
+  return L.divIcon({
+    className: 'custom-guard-marker',
+    html: `<div className="relative flex items-center justify-center h-9 w-9 rounded-full ${colorClass} text-white font-bold text-xs border-2 shadow-lg shadow-black/50 cursor-pointer radar-ping">
+            ${initial}
+            <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-emerald-400 border border-slate-900"></span>
+          </div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  });
 };
 
 export default function Dashboard() {
-  const [guards, setGuards] = useState([]);
-  const [logs, setLogs] = useState([]);
-  const [incidents, setIncidents] = useState([]);
-  const [checkpoints, setCheckpoints] = useState([]);
-  const [sites, setSites] = useState([]);
+  const { stats, guards, liveEvents, openGuardDrawer, addToast } = useSpot();
+  const [timeFilter, setTimeFilter] = useState('Daily');
+  const [activeTab, setActiveTab] = useState('All');
 
-  useEffect(() => {
-    const u1 = subscribeCollection('users', setGuards);
-    const u2 = subscribeCollection('patrolLogs', setLogs);
-    const u3 = subscribeCollection('incidents', setIncidents);
-    const u4 = subscribeCollection('checkpoints', setCheckpoints);
-    const u5 = subscribeCollection('sites', setSites);
-    return () => { u1(); u2(); u3(); u4(); u5(); };
-  }, []);
+  const topCards = [
+    { title: 'Active Guards', count: stats.activeGuards, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
+    { title: 'Currently On Patrol', count: stats.currentlyOnPatrol, icon: ShieldAlert, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+    { title: "Today's Patrols", count: stats.todaysPatrols, icon: CalendarCheck, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
+    { title: 'Completed Patrols', count: stats.completedPatrols, icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+    { title: 'Delayed Patrols', count: stats.delayedPatrols, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
+    { title: 'Missed Patrols', count: stats.missedPatrols, icon: AlertTriangle, color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20' },
+    { title: 'Offline Guards', count: stats.offlineGuards, icon: WifiOff, color: 'text-slate-400', bg: 'bg-slate-500/10 border-slate-500/20' },
+    { title: 'Incidents Today', count: stats.incidentsToday, icon: Activity, color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20' }
+  ];
 
-  const activeGuards = guards.filter((g) => g.active).length;
-  const todaysLogs = logs.filter((l) => Date.now() - toMillis(l.timestamp) < 24 * 3600 * 1000);
-  const openIncidents = incidents.filter((i) => !i.resolved).length;
-
-  const recentLogs = useMemo(() =>
-    [...logs].sort((a, b) => toMillis(b.timestamp) - toMillis(a.timestamp)).slice(0, 8)
-  , [logs]);
-
-  const guardMap = Object.fromEntries(guards.map((g) => [g.id, g.name]));
-  const cpMap = Object.fromEntries(checkpoints.map((c) => [c.id, c.name]));
+  const mapCenter = [14.5547, 121.0244];
 
   return (
-    <Layout title="Dashboard" subtitle="Real-time overview of patrol operations">
+    <Layout
+      title="Security Operations Command Dashboard"
+      subtitle="Real-time Guard Patrol Operations, GPS Telemetry & Live Telematics"
+    >
       <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Active Guards" value={activeGuards} sub={`of ${guards.length} total`} />
-        <Stat label="Patrols Today" value={todaysLogs.length} sub="checkpoint scans" tone="emerald" />
-        <Stat label="Open Incidents" value={openIncidents} sub="require attention" tone="rose" />
-        <Stat label="Sites Monitored" value={sites.length} sub={`${checkpoints.length} checkpoints`} tone="amber" />
-      </div>
-
-      <div>
-        <OperationsPanel
-          activeGuards={activeGuards}
-          totalGuards={guards.length}
-          todaysLogs={todaysLogs.length}
-          openIncidents={openIncidents}
-          checkpoints={checkpoints.length}
-          sites={sites.length}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="card flex min-h-[360px] flex-col lg:col-span-2">
-          <div className="border-b border-slate-200 px-5 py-4">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-sm bg-cyan-500" />
-              <h3 className="font-semibold text-slate-950">Recent Patrol Activity</h3>
-            </div>
-            <p className="text-xs text-slate-500">Latest checkpoint scans from the field</p>
-          </div>
-          <div className="scroll-invisible min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto lg:max-h-[44vh]">
-            {recentLogs.length === 0 && (
-              <div className="p-8 text-center">
-                <div className="mx-auto mb-3 h-10 w-10 rounded-lg border border-dashed border-cyan-200 bg-cyan-50" />
-                <div className="text-sm font-medium text-slate-600">No patrol activity yet</div>
-                <div className="mt-1 text-xs text-slate-400">New checkpoint scans will stream into this panel.</div>
-              </div>
-            )}
-            {recentLogs.map((l) => (
-              <div key={l.id} className="flex items-center justify-between gap-4 px-5 py-3 transition-colors hover:bg-slate-50">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className={`h-2 w-2 rounded-sm ${l.status === 'late' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-slate-950">{guardMap[l.guardId] || 'Unknown Guard'}</div>
-                    <div className="truncate text-xs text-slate-500">Scanned <b className="text-cyan-800">{cpMap[l.checkpointId] || l.checkpointId}</b></div>
+        {/* Top 8 Statistics Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3.5">
+          {topCards.map((card, idx) => {
+            const Icon = card.icon;
+            return (
+              <div
+                key={idx}
+                className="card-spot flex flex-col justify-between p-4 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-400 truncate">{card.title}</span>
+                  <div className={`p-1.5 rounded-lg border ${card.bg}`}>
+                    <Icon className={`h-4 w-4 ${card.color}`} />
                   </div>
                 </div>
-                <div className="shrink-0 text-right">
-                  {l.status === 'late'
-                    ? <span className="badge-warn">Late</span>
-                    : <span className="badge-ok">On time</span>}
-                  <div className="mt-1 text-xs text-slate-400">{timeAgo(l.timestamp)}</div>
-                </div>
+                <div className="mt-3 text-2xl font-bold text-white tracking-tight">{card.count}</div>
               </div>
-            ))}
+            );
+          })}
+        </div>
+
+        {/* Center Live Map (~60% width) & Right Activity Feed (~40% width) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+          {/* Live Map Box */}
+          <div className="lg:col-span-7 xl:col-span-8 card-spot p-0 overflow-hidden flex flex-col min-h-[520px] relative border border-slate-800">
+            {/* Map Top Bar Controls */}
+            <div className="flex items-center justify-between border-b border-slate-800 bg-[#1E293B] px-5 py-3.5 z-10">
+              <div className="flex items-center gap-2.5">
+                <span className="relative flex h-3 w-3">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
+                </span>
+                <span className="text-sm font-bold text-white tracking-wide">
+                  Live Global Operations Map
+                </span>
+                <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-400 border border-blue-500/30">
+                  {guards.length} Active Pins
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => addToast('Map View', 'Center reset to Metro Manila Command Sector', 'info')}
+                  className="btn-secondary py-1 px-3 text-xs"
+                >
+                  <Maximize2 className="h-3.5 w-3.5 mr-1" /> Reset View
+                </button>
+              </div>
+            </div>
+
+            {/* Leaflet Interactive Map Container */}
+            <div className="flex-1 w-full h-full relative min-h-[460px]">
+              <MapContainer
+                center={mapCenter}
+                zoom={14}
+                scrollWheelZoom={false}
+                className="w-full h-full z-0"
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                />
+
+                {/* Guard Markers on Map */}
+                {guards.map((guard) => (
+                  <Marker
+                    key={guard.id}
+                    position={[guard.gpsLat, guard.gpsLng]}
+                    icon={createGuardMarker(guard.status, guard.name.charAt(0))}
+                  >
+                    <Popup className="custom-popup">
+                      <div className="p-1 min-w-[200px]">
+                        <div className="flex items-center gap-2 border-b border-slate-700 pb-2 mb-2">
+                          <img src={guard.photo} alt={guard.name} className="h-8 w-8 rounded-full object-cover" />
+                          <div>
+                            <div className="font-bold text-white text-sm">{guard.name}</div>
+                            <div className="text-[11px] text-slate-400">{guard.siteName}</div>
+                          </div>
+                        </div>
+                        <div className="text-xs space-y-1 mb-3">
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Status:</span>
+                            <span className="font-semibold text-emerald-400">{guard.status}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Battery:</span>
+                            <span className="font-semibold text-white">{guard.battery}%</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Face Verified:</span>
+                            <span className="font-semibold text-blue-400">{guard.faceVerified ? 'Yes' : 'No'}</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => openGuardDrawer(guard)}
+                          className="w-full btn-primary py-1 text-xs"
+                        >
+                          View Full Guard Drawer →
+                        </button>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+              </MapContainer>
+            </div>
+          </div>
+
+          {/* Right Activity Feed */}
+          <div className="lg:col-span-5 xl:col-span-4 card-spot flex flex-col min-h-[520px]">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-blue-400" />
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Live Operations Stream</h3>
+              </div>
+              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
+                REALTIME
+              </span>
+            </div>
+
+            {/* Event List Stream */}
+            <div className="custom-scrollbar flex-1 overflow-y-auto mt-4 space-y-3 pr-1">
+              {liveEvents.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-500">
+                  No live events recorded in database yet. Ready for fresh field events.
+                </div>
+              ) : (
+                liveEvents.map((ev) => (
+                  <div
+                    key={ev.id}
+                    className="flex items-start gap-3 p-3 rounded-xl border border-slate-800/80 bg-slate-900/50 hover:bg-slate-800/60 transition group"
+                  >
+                    <div className="p-2 rounded-lg bg-blue-600/10 border border-blue-500/20 text-blue-400 shrink-0 mt-0.5">
+                      <ShieldCheck className="h-4 w-4" />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[10px] font-bold text-blue-400">{ev.time}</span>
+                        <span className="text-[10px] text-slate-500">Verified Event</span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-200 font-medium leading-relaxed">{ev.text}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="card flex min-h-[360px] flex-col">
-          <div className="border-b border-slate-200 px-5 py-4">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-sm bg-emerald-500" />
-              <h3 className="font-semibold text-slate-950">Guards On Duty</h3>
+        {/* Bottom Analytics Visuals */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Patrol Completion Overview Bar */}
+          <div className="card-spot">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-blue-400" /> Patrol Completion Status
+              </h4>
+              <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-xs">
+                {['Daily', 'Weekly', 'Monthly'].map((tf) => (
+                  <button
+                    key={tf}
+                    onClick={() => setTimeFilter(tf)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition ${
+                      timeFilter === tf ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {tf}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-slate-300 font-medium">Completed Patrols</span>
+                  <span className="font-bold text-emerald-400">90.1% (128)</span>
+                </div>
+                <div className="h-2.5 w-full bg-slate-900 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: '90.1%' }} />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-slate-300 font-medium">Delayed Patrols</span>
+                  <span className="font-bold text-amber-400">7.0% (10)</span>
+                </div>
+                <div className="h-2.5 w-full bg-slate-900 rounded-full overflow-hidden">
+                  <div className="h-full bg-amber-500 rounded-full" style={{ width: '7.0%' }} />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-slate-300 font-medium">Missed / Critical</span>
+                  <span className="font-bold text-rose-400">2.9% (4)</span>
+                </div>
+                <div className="h-2.5 w-full bg-slate-900 rounded-full overflow-hidden">
+                  <div className="h-full bg-rose-500 rounded-full" style={{ width: '2.9%' }} />
+                </div>
+              </div>
             </div>
           </div>
-          <div className="scroll-invisible min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto lg:max-h-[44vh]">
-            {guards.filter((g) => g.active).length === 0 && (
-              <div className="p-8 text-center">
-                <div className="mx-auto mb-3 h-10 w-10 rounded-lg border border-dashed border-emerald-200 bg-emerald-50" />
-                <div className="text-sm font-medium text-slate-600">No guards on duty</div>
-                <div className="mt-1 text-xs text-slate-400">Active personnel will appear here.</div>
+
+          {/* Average Patrol Duration */}
+          <div className="card-spot">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <Clock className="h-4 w-4 text-emerald-400" /> Patrol Duration Metrics
+              </h4>
+              <span className="text-xs text-slate-400 font-mono">Avg 38.4m</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-center">
+              <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/50">
+                <div className="text-xs text-slate-400">Quick Patrols (&lt;30m)</div>
+                <div className="text-xl font-bold text-white mt-1">42%</div>
               </div>
-            )}
-            {guards.filter((g) => g.active).map((g) => (
-              <div key={g.id} className="flex items-center gap-3 px-5 py-3">
-                <div className="grid h-9 w-9 place-items-center rounded-md bg-cyan-50 text-sm font-semibold text-cyan-800 ring-1 ring-inset ring-cyan-100">
-                  {g.name?.[0] || '?'}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-slate-950">{g.name}</div>
-                  <div className="text-xs text-slate-500">{g.deviceId ? `Device ${g.deviceId}` : 'No device bound'}</div>
-                </div>
-                <span className="badge-ok">Active</span>
+              <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/50">
+                <div className="text-xs text-slate-400">Standard (30-60m)</div>
+                <div className="text-xl font-bold text-emerald-400 mt-1">51%</div>
               </div>
-            ))}
+            </div>
+
+            <div className="mt-3 p-3 rounded-xl border border-slate-800 bg-slate-900/50 text-center">
+              <div className="text-xs text-slate-400">Extended Sweep (&gt;60m)</div>
+              <div className="text-xl font-bold text-amber-400 mt-1">7%</div>
+            </div>
+          </div>
+
+          {/* Incident Trend Heatmap */}
+          <div className="card-spot">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-rose-400" /> Incident Trend Analysis
+              </h4>
+              <span className="text-xs text-emerald-400 font-semibold">-14% vs Last Week</span>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Perimeter Breaches</span>
+                <span className="font-bold text-rose-400">1 Logged</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Equipment Failures</span>
+                <span className="font-bold text-amber-400">1 Logged</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Access Mismatches</span>
+                <span className="font-bold text-blue-400">1 Logged</span>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+              <span>Overall Security Rating:</span>
+              <span className="font-bold text-emerald-400 text-sm">98.5% Excellent</span>
+            </div>
           </div>
         </div>
-      </div>
       </div>
     </Layout>
   );
