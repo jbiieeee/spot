@@ -130,3 +130,12 @@
 .leaflet-popup-tip {
   background-color: #1E293B !important;
 }
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
