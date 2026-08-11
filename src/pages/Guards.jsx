@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import Layout from '../components/Layout';
 import { useSpot } from '../context/SpotContext';
 import {
-  Users, Search, Battery, ShieldCheck, Eye, Plus, Pencil, Trash2, X, Check, AlertTriangle
+  Users, Search, Battery, ShieldCheck, Eye, Plus, Pencil, Trash2, X,
+  Check, AlertTriangle, Smartphone, Link, LinkOff
 } from 'lucide-react';
 
 // ─── Reusable Modal Shell ────────────────────────────────────────────────────
@@ -109,17 +110,113 @@ function DeleteConfirm({ label, onCancel, onConfirm }) {
   );
 }
 
+// ─── Assign Device Modal ──────────────────────────────────────────────────────
+function AssignDeviceModal({ guard, devices, onClose, onAssign }) {
+  const [selected, setSelected] = useState(guard.deviceId || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onAssign(guard.id, selected || null);
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <Modal
+      title="Assign Device to Guard"
+      subtitle={`Binding a phone/device to ${guard.name}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button onClick={onClose} className="btn-secondary text-xs">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="btn-primary text-xs flex items-center gap-2">
+            {saving ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" /> : <Link className="h-3.5 w-3.5" />}
+            {selected ? 'Bind Device' : 'Remove Binding'}
+          </button>
+        </>
+      }
+    >
+      {/* Current binding */}
+      <div className={`flex items-center gap-3 rounded-xl p-3 border ${guard.deviceId ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-900/60 border-slate-700'}`}>
+        <Smartphone className={`h-5 w-5 ${guard.deviceId ? 'text-emerald-400' : 'text-slate-500'}`} />
+        <div>
+          <div className="text-xs font-semibold text-slate-300">Current Device</div>
+          <div className={`text-xs font-mono ${guard.deviceId ? 'text-emerald-400' : 'text-slate-500'}`}>
+            {guard.deviceId || 'No device assigned'}
+          </div>
+        </div>
+      </div>
+
+      {/* Device picker */}
+      <Field label="Select a Registered Device">
+        <select
+          className="input-spot"
+          value={selected}
+          onChange={e => setSelected(e.target.value)}
+        >
+          <option value="">— None (unassign) —</option>
+          {devices.map(d => (
+            <option key={d.id} value={d.deviceId}>
+              {d.deviceModel} · {d.deviceId} · {d.osVersion}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      {devices.length === 0 && (
+        <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          No registered devices found. Install the app on a phone to register it.
+        </div>
+      )}
+
+      {/* Device list */}
+      {devices.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Registered Devices</div>
+          {devices.map(d => (
+            <button
+              key={d.id}
+              onClick={() => setSelected(d.deviceId === selected ? '' : d.deviceId)}
+              className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition ${
+                selected === d.deviceId
+                  ? 'border-blue-500/50 bg-blue-500/10'
+                  : 'border-slate-700 bg-slate-900/40 hover:border-slate-500'
+              }`}
+            >
+              <Smartphone className={`h-5 w-5 shrink-0 ${selected === d.deviceId ? 'text-blue-400' : 'text-slate-500'}`} />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold text-white">{d.deviceModel}</div>
+                <div className="text-[10px] font-mono text-slate-400 truncate">{d.deviceId}</div>
+                <div className="text-[10px] text-slate-500">{d.osVersion}</div>
+              </div>
+              <div className="text-[10px] text-slate-500 shrink-0">
+                {d.lastActive ? d.lastActive.toLocaleDateString() : 'N/A'}
+              </div>
+              {selected === d.deviceId && (
+                <Check className="h-4 w-4 text-blue-400 shrink-0" />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // ─── Main Guards Page ─────────────────────────────────────────────────────────
 export default function Guards() {
-  const { guards, openGuardDrawer, addGuard, updateGuard, deleteGuard } = useSpot();
+  const { guards, devices, openGuardDrawer, addGuard, updateGuard, deleteGuard, assignDeviceToGuard } = useSpot();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
 
   // Modal state
   const [showAdd, setShowAdd] = useState(false);
-  const [editTarget, setEditTarget] = useState(null);   // guard object to edit
-  const [deleteTarget, setDeleteTarget] = useState(null); // guard object to delete
+  const [editTarget, setEditTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deviceTarget, setDeviceTarget] = useState(null); // guard to assign device
   const [addForm, setAddForm] = useState(EMPTY_GUARD);
   const [editForm, setEditForm] = useState(EMPTY_GUARD);
   const [saving, setSaving] = useState(false);
@@ -171,7 +268,7 @@ export default function Guards() {
   return (
     <Layout
       title="Guards Directory & Personnel Roster"
-      subtitle="Enterprise Active Roster, Battery Telemetry, Face Verification & Drawer Telematics"
+      subtitle="Enterprise Active Roster, Battery Telemetry, Face Verification & Device Assignment"
     >
       <div className="space-y-6">
         {/* Header Controls */}
@@ -210,6 +307,17 @@ export default function Guards() {
           </div>
         </div>
 
+        {/* Devices Summary Banner */}
+        <div className="flex items-center gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 px-5 py-3">
+          <Smartphone className="h-5 w-5 text-blue-400 shrink-0" />
+          <div className="text-xs text-slate-300">
+            <span className="font-bold text-white">{devices.length}</span> registered device(s) available to assign.
+            <span className="ml-2 text-slate-400">
+              {guards.filter(g => g.deviceId).length} guard(s) currently have a device bound.
+            </span>
+          </div>
+        </div>
+
         {/* Guards Enterprise Table */}
         <div className="card-spot p-0 overflow-hidden border border-slate-800">
           <div className="overflow-x-auto custom-scrollbar">
@@ -223,13 +331,14 @@ export default function Guards() {
                   <th className="px-6 py-4">Battery</th>
                   <th className="px-6 py-4">GPS Accuracy</th>
                   <th className="px-6 py-4">Face Verified</th>
+                  <th className="px-6 py-4">Device</th>
                   <th className="px-6 py-4">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80">
                 {filteredGuards.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-16 text-center">
+                    <td colSpan={9} className="py-16 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="p-3 rounded-2xl bg-slate-800/60 border border-slate-700">
                           <Users className="h-7 w-7 text-slate-500" />
@@ -304,6 +413,20 @@ export default function Guards() {
                         )}
                       </td>
 
+                      {/* Device */}
+                      <td className="px-6 py-4">
+                        {guard.deviceId ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold text-emerald-400 border border-emerald-500/30 font-mono">
+                            <Smartphone className="h-3 w-3" />
+                            {guard.deviceId.substring(0, 10)}…
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                            <LinkOff className="h-3 w-3" /> Unassigned
+                          </span>
+                        )}
+                      </td>
+
                       {/* Actions */}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
@@ -320,6 +443,13 @@ export default function Guards() {
                             className="p-1.5 rounded-lg border border-slate-700 bg-slate-800 text-amber-400 hover:text-white hover:border-amber-500 transition"
                           >
                             <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setDeviceTarget(guard)}
+                            title="Assign Device"
+                            className="p-1.5 rounded-lg border border-slate-700 bg-slate-800 text-violet-400 hover:text-white hover:border-violet-500 transition"
+                          >
+                            <Smartphone className="h-3.5 w-3.5" />
                           </button>
                           <button
                             onClick={() => setDeleteTarget(guard)}
@@ -385,6 +515,16 @@ export default function Guards() {
         >
           <GuardFormFields form={editForm} onChange={(k, v) => setEditForm(f => ({ ...f, [k]: v }))} />
         </Modal>
+      )}
+
+      {/* ── Assign Device Modal ───────────────────────────────── */}
+      {deviceTarget && (
+        <AssignDeviceModal
+          guard={deviceTarget}
+          devices={devices}
+          onClose={() => setDeviceTarget(null)}
+          onAssign={assignDeviceToGuard}
+        />
       )}
 
       {/* ── Delete Confirmation ───────────────────────────────── */}

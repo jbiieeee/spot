@@ -16,6 +16,7 @@ import Analytics from './pages/Analytics';
 import Reports from './pages/Reports';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
+import Devices from './pages/Devices';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="/logs" element={<AdminLogs />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/devices" element={<Devices />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </SpotProvider>

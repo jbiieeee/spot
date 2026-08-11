@@ -1,8 +1,31 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { db, hasFirebaseConfig } from '../lib/firebase';
 import { subscribeCollection, updateItem, addItem, removeItem } from '../lib/dataSource';
 
 const SpotContext = createContext();
+
+function playChime() {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const playNote = (freq, time, duration) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, time);
+      gain.gain.setValueAtTime(0.15, time);
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(time);
+      osc.stop(time + duration);
+    };
+    const now = audioCtx.currentTime;
+    playNote(659.25, now, 0.3); // E5
+    playNote(880.00, now + 0.12, 0.4); // A5
+  } catch (e) {
+    console.error("Audio playback failed:", e);
+  }
+}
 
 export function SpotProvider({ children }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -15,6 +38,9 @@ export function SpotProvider({ children }) {
   const [incidents, setIncidents] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [liveEvents, setLiveEvents] = useState([]);
+  const [devices, setDevices] = useState([]);
+  const [attendance, setAttendance] = useState([]);
+  const [checkpointLogs, setCheckpointLogs] = useState([]);
 
   // Database Connection Indicator
   const [dbConnected, setDbConnected] = useState(Boolean(hasFirebaseConfig && db));
@@ -23,6 +49,9 @@ export function SpotProvider({ children }) {
   const [selectedGuard, setSelectedGuard] = useState(null);
   const [isGuardDrawerOpen, setIsGuardDrawerOpen] = useState(false);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+
+  // Track previous guards state to detect device updates
+  const prevGuardsRef = useRef({});
 
   // Toasts Notification Stack
   const [toasts, setToasts] = useState([]);
@@ -81,25 +110,53 @@ export function SpotProvider({ children }) {
       setIncidents(formatted);
     });
 
-    // 2. Sites
+    // 2. Sites — merge web 'sites' + Android 'client_sites'
+    let webSites = [];
+    let androidSites = [];
+    const mergeSites = () => {
+      const all = [...webSites];
+      androidSites.forEach(as => {
+        if (!all.find(s => s.id === as.id)) all.push(as);
+      });
+      setSites(all);
+    };
+
     const unsubSites = subscribeCollection('sites', (fsSites) => {
-      const formatted = (fsSites || []).map((doc) => ({
+      webSites = (fsSites || []).map((doc) => ({
         id: doc.id,
-        name: doc.name || 'Managed Site',
+        name: doc.name || doc.siteName || 'Managed Site',
         type: doc.type || 'Commercial',
         client: doc.client || 'Client',
-        address: doc.address || 'Address',
+        address: doc.address || doc.location || 'Address',
         activeGuardsCount: doc.activeGuardsCount || 0,
         checkpointsCount: doc.checkpointsCount || 0,
         routesCount: doc.routesCount || 0,
         incidentsCount: doc.incidentsCount || 0,
         status: doc.status || 'Active',
-        // Preserve null so map knows there's no geocode yet
         lat: doc.lat ?? null,
         lng: doc.lng ?? null,
         image: doc.image || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=500&q=80'
       }));
-      setSites(formatted);
+      mergeSites();
+    });
+
+    const unsubClientSites = subscribeCollection('client_sites', (fsSites) => {
+      androidSites = (fsSites || []).map((doc) => ({
+        id: doc.id,
+        name: doc.siteName || doc.name || 'Managed Site',
+        type: doc.type || 'Commercial',
+        client: doc.client || 'Client',
+        address: doc.address || doc.location || 'Address',
+        activeGuardsCount: doc.activeGuardsCount || 0,
+        checkpointsCount: doc.checkpointsCount || 0,
+        routesCount: doc.routesCount || 0,
+        incidentsCount: doc.incidentsCount || 0,
+        status: doc.status || 'Active',
+        lat: doc.lat ?? null,
+        lng: doc.lng ?? null,
+        image: doc.image || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=500&q=80'
+      }));
+      mergeSites();
     });
 
     // 3. Guards / Users
@@ -127,31 +184,92 @@ export function SpotProvider({ children }) {
           totalCheckpoints: u.totalCheckpoints || 0,
           etaMinutes: u.etaMinutes || 0,
           phone: u.phone || 'N/A',
+          deviceId: u.deviceId || null,
           performanceRating: u.performanceRating || 100,
           attendanceRate: u.attendanceRate || 100
         }));
+
+      // Check if we already had guards loaded (to avoid triggering on first load)
+      const hasPrev = Object.keys(prevGuardsRef.current).length > 0;
+      
+      formatted.forEach((guard) => {
+        const prev = prevGuardsRef.current[guard.id];
+        if (hasPrev && prev) {
+          const deviceChanged = guard.deviceId !== prev.deviceId;
+          const phoneChanged = guard.phone !== prev.phone && prev.phone !== 'N/A';
+          
+          if (deviceChanged || phoneChanged) {
+            let message = '';
+            if (deviceChanged) {
+              message = `${guard.name}'s assigned device updated to: ${guard.deviceId || 'None'}`;
+            } else {
+              message = `${guard.name}'s phone number updated to: ${guard.phone}`;
+            }
+            
+            // Trigger toast
+            addToast('Guard Device/Contact Updated', message, 'info');
+            
+            // Play chime sound
+            playChime();
+          }
+        }
+        
+        // Update ref value
+        prevGuardsRef.current[guard.id] = {
+          deviceId: guard.deviceId,
+          phone: guard.phone
+        };
+      });
+
+      // Initialize keys for new guards if it was empty
+      if (!hasPrev) {
+        formatted.forEach((g) => {
+          prevGuardsRef.current[g.id] = {
+            deviceId: g.deviceId,
+            phone: g.phone
+          };
+        });
+      }
+
       setGuards(formatted);
     });
 
-    // 4. Patrols / Routes / PatrolLogs
+    // 4. Patrols — merge patrolLogs + patrol_schedules
+    let webPatrols = [];
+    let androidPatrols = [];
+    const mergePatrols = () => {
+      const all = [...webPatrols];
+      androidPatrols.forEach(ap => {
+        if (!all.find(p => p.id === ap.id)) all.push(ap);
+      });
+      setPatrols(all);
+    };
+
+    const mapPatrolDoc = (doc) => ({
+      id: doc.id,
+      guardId: doc.guardId || 'N/A',
+      guardName: doc.guardName || 'Guard',
+      guardPhoto: doc.guardPhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
+      siteName: doc.siteName || 'Site',
+      routeName: doc.routeName || doc.routeId || 'Patrol Route',
+      status: doc.status || 'In Progress',
+      progressPct: doc.progressPct || 0,
+      completedCount: doc.completedCount || 0,
+      totalCount: doc.totalCount || 0,
+      remainingCount: doc.remainingCount || 0,
+      etaMinutes: doc.etaMinutes || 0,
+      startTime: doc.startTime || (doc.startedAt?.toDate ? doc.startedAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '09:00 AM'),
+      checkpoints: doc.checkpoints || []
+    });
+
     const unsubPatrols = subscribeCollection('patrolLogs', (fsLogs) => {
-      const formatted = (fsLogs || []).map((doc) => ({
-        id: doc.id,
-        guardId: doc.guardId || 'G-100',
-        guardName: doc.guardName || 'Guard',
-        guardPhoto: doc.guardPhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
-        siteName: doc.siteName || 'Site',
-        routeName: doc.routeName || 'Patrol Route',
-        status: doc.status || 'In Progress',
-        progressPct: doc.progressPct || 0,
-        completedCount: doc.completedCount || 0,
-        totalCount: doc.totalCount || 0,
-        remainingCount: doc.remainingCount || 0,
-        etaMinutes: doc.etaMinutes || 0,
-        startTime: doc.startTime || '09:00 AM',
-        checkpoints: doc.checkpoints || []
-      }));
-      setPatrols(formatted);
+      webPatrols = (fsLogs || []).map(mapPatrolDoc);
+      mergePatrols();
+    });
+
+    const unsubPatrolSchedules = subscribeCollection('patrol_schedules', (fsLogs) => {
+      androidPatrols = (fsLogs || []).map(mapPatrolDoc);
+      mergePatrols();
     });
 
     // 5. Audit Logs
@@ -189,15 +307,64 @@ export function SpotProvider({ children }) {
       setClients(formatted);
     });
 
+    // 7. Devices
+    const unsubDevices = subscribeCollection('devices', (fsDevices) => {
+      const formatted = (fsDevices || []).map((d) => ({
+        id: d.id,
+        deviceId: d.deviceId || d.id,
+        deviceModel: d.deviceModel || 'Unknown Device',
+        osVersion: d.osVersion || 'Unknown OS',
+        lastActive: d.lastActive?.toDate ? d.lastActive.toDate() : null,
+      }));
+      setDevices(formatted);
+    });
+
+    // 8. Attendance (from Android app)
+    const unsubAttendance = subscribeCollection('attendance', (fsDocs) => {
+      const formatted = (fsDocs || []).map((doc) => ({
+        id: doc.id,
+        guardId: doc.guardId || doc.userId || '',
+        guardName: doc.guardName || doc.name || 'Guard',
+        siteId: doc.siteId || '',
+        siteName: doc.siteName || 'Site',
+        timeIn: doc.timeIn?.toDate ? doc.timeIn.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (doc.timeIn || ''),
+        timeOut: doc.timeOut?.toDate ? doc.timeOut.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (doc.timeOut || ''),
+        date: doc.date || (doc.timestamp?.toDate ? doc.timestamp.toDate().toLocaleDateString() : ''),
+        status: doc.status || 'Present',
+        faceVerified: Boolean(doc.faceVerified),
+      }));
+      setAttendance(formatted);
+    });
+
+    // 9. Checkpoint logs (from Android app)
+    const unsubCheckpointLogs = subscribeCollection('checkpoint_logs', (fsDocs) => {
+      const formatted = (fsDocs || []).map((doc) => ({
+        id: doc.id,
+        guardId: doc.guardId || '',
+        guardName: doc.guardName || 'Guard',
+        checkpointId: doc.checkpointId || doc.locationId || '',
+        checkpointName: doc.checkpointName || doc.locationName || 'Checkpoint',
+        siteId: doc.siteId || '',
+        timestamp: doc.timestamp?.toDate ? doc.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently',
+        verified: Boolean(doc.verified),
+      }));
+      setCheckpointLogs(formatted);
+    });
+
     setDbConnected(true);
 
     return () => {
       unsubIncidents();
       unsubSites();
+      unsubClientSites();
       unsubUsers();
       unsubPatrols();
+      unsubPatrolSchedules();
       unsubAudit();
       unsubClients();
+      unsubDevices();
+      unsubAttendance();
+      unsubCheckpointLogs();
     };
   }, []);
 
@@ -440,6 +607,38 @@ export function SpotProvider({ children }) {
   };
 
   // -------------------------------------------------------------
+  // Assign Device to Guard
+  // -------------------------------------------------------------
+  const assignDeviceToGuard = async (guardId, deviceId) => {
+    const guard = guards.find((g) => g.id === guardId);
+    if (!guard) return;
+
+    // Optimistic update
+    setGuards((prev) =>
+      prev.map((g) => (g.id === guardId ? { ...g, deviceId: deviceId || null } : g))
+    );
+
+    if (hasFirebaseConfig && db) {
+      try {
+        await updateItem('users', guardId, { deviceId: deviceId || null });
+      } catch (e) {
+        console.warn('Firestore assign device:', e);
+      }
+    }
+
+    if (deviceId) {
+      addToast(
+        'Device Assigned',
+        `Device bound to ${guard.name}. Chime alert active.`,
+        'success'
+      );
+      playChime();
+    } else {
+      addToast('Device Unlinked', `${guard.name}'s device binding has been removed.`, 'info');
+    }
+  };
+
+  // -------------------------------------------------------------
   // CRUD — Patrols
   // -------------------------------------------------------------
   const addPatrol = async (newPatrol) => {
@@ -521,6 +720,9 @@ export function SpotProvider({ children }) {
         incidents,
         auditLogs,
         liveEvents,
+        devices,
+        attendance,
+        checkpointLogs,
         stats,
         selectedGuard,
         isGuardDrawerOpen,
@@ -549,6 +751,8 @@ export function SpotProvider({ children }) {
         deleteIncident,
         // Patrols
         addPatrol,
+        // Devices
+        assignDeviceToGuard,
       }}
     >
       {children}
