@@ -3,7 +3,7 @@ import Layout from '../components/Layout';
 import { useSpot } from '../context/SpotContext';
 import {
   Users, Search, Battery, ShieldCheck, Eye, Plus, Pencil, Trash2, X,
-  Check, AlertTriangle, Smartphone, Link, LinkOff
+  Check, AlertTriangle, Smartphone, Link, Unlink
 } from 'lucide-react';
 
 // ─── Reusable Modal Shell ────────────────────────────────────────────────────
@@ -422,7 +422,7 @@ export default function Guards() {
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
-                            <LinkOff className="h-3 w-3" /> Unassigned
+                            <Unlink className="h-3 w-3" /> Unassigned
                           </span>
                         )}
                       </td>

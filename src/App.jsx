@@ -17,6 +17,7 @@ import Reports from './pages/Reports';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import Devices from './pages/Devices';
+import FaceVerify from './pages/FaceVerify';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="/tracking" element={<GuardTracking />} />
         <Route path="/routes" element={<PatrolOperations />} />
         <Route path="/guards" element={<Guards />} />
+        <Route path="/face-verify" element={<FaceVerify />} />
         <Route path="/sites" element={<Sites />} />
         <Route path="/clients" element={<Clients />} />
         <Route path="/schedules" element={<Schedules />} />

@@ -5,9 +5,9 @@
   "type": "module",
   "description": "S.P.O.T. — Security Patrol Operations & Tracking (Web Command Center)",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev": "vite --configLoader native",
+    "build": "vite build --configLoader native",
+    "preview": "vite preview --configLoader native"
   },
   "dependencies": {
     "firebase": "^10.12.2",

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Layout from '../components/Layout';
 import { useSpot } from '../context/SpotContext';
-import { Smartphone, RefreshCw, Link, LinkOff, Search, Wifi } from 'lucide-react';
+import { Smartphone, RefreshCw, Link, Unlink, Search, Wifi } from 'lucide-react';
 
 function formatDate(date) {
   if (!date) return 'N/A';
@@ -60,7 +60,7 @@ export default function Devices() {
           </div>
           <div className="card-spot p-5 flex items-center gap-4">
             <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30">
-              <LinkOff className="h-6 w-6 text-amber-400" />
+              <Unlink className="h-6 w-6 text-amber-400" />
             </div>
             <div>
               <div className="text-2xl font-bold text-white">{unassigned.length}</div>
@@ -177,7 +177,7 @@ export default function Devices() {
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-bold text-amber-400 border border-amber-500/30">
-                              <LinkOff className="h-3 w-3" /> Free
+                              <Unlink className="h-3 w-3" /> Free
                             </span>
                           )}
                         </td>

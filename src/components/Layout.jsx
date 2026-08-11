@@ -42,6 +42,7 @@ export default function Layout({ children, title, subtitle, actions }) {
     if (path === '/tracking') return 'Command Center / Live Monitoring';
     if (path === '/routes') return 'Command Center / Patrol Operations';
     if (path === '/guards') return 'Command Center / Guards Directory';
+    if (path === '/face-verify') return 'Command Center / Face Verification';
     if (path === '/sites') return 'Command Center / Deployment Sites';
     if (path === '/clients') return 'Command Center / Client Accounts';
     if (path === '/schedules') return 'Command Center / Duty Schedules';

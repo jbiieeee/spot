@@ -223,8 +223,8 @@ function DiagnosticsTab() {
     { label: "Realtime Listener", value: "Connected & Listening", color: "text-emerald-400" },
     { label: "Auth Provider", value: "Firebase Authentication", color: "text-blue-400" },
     { label: "Telemetry Push", value: "Active (WebSocket)", color: "text-emerald-400" },
-    { label: "Geofence Engine", value: "Running — 47 Active Zones", color: "text-blue-400" },
-    { label: "AI Liveness API", value: "Online — avg 340ms", color: "text-emerald-400" },
+    { label: "Geofence Engine", value: "Running - 47 Active Zones", color: "text-blue-400" },
+    { label: "AI Liveness API", value: "Online - avg 340ms", color: "text-emerald-400" },
     { label: "Last Backup", value: "Today, 03:00 AM", color: "text-slate-300" },
   ];
   return (
@@ -270,7 +270,7 @@ export default function SettingsPage() {
 
   return (
     <Layout title="">
-      {/* Big heading — matches reference image style */}
+      {/* Big heading - matches reference image style */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-white leading-tight tracking-tight">

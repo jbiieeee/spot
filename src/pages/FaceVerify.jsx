@@ -1,11 +1,9 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import { useSpot } from '../context/SpotContext';
-import { updateItem } from '../lib/dataSource';
-import { hasFirebaseConfig } from '../lib/firebase';
 import {
   Camera, ShieldCheck, X, ScanFace, AlertTriangle, CheckCircle2,
-  RefreshCw, UserCheck
+  RefreshCw, UserCheck, SunMedium
 } from 'lucide-react';
 
 // ─── Simple pixel-based brightness comparison for face detection hint ─────────
@@ -65,12 +63,12 @@ export default function FaceVerify() {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const intervalRef = useRef(null);
+  const resetTimerRef = useRef(null);
 
   const [selectedGuard, setSelectedGuard] = useState(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [capturedImage, setCapturedImage] = useState(null);
-  const [livePreview, setLivePreview] = useState(null); // base64
   const [status, setStatus] = useState('idle'); // idle | capturing | verifying | success | failed
   const [brightness, setBrightness] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -79,10 +77,22 @@ export default function FaceVerify() {
     g => g.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  useEffect(() => {
+    if (!selectedGuard) return;
+    const freshGuard = guards.find((guard) => guard.id === selectedGuard.id);
+    if (freshGuard) setSelectedGuard(freshGuard);
+  }, [guards, selectedGuard?.id]);
+
   // ─── Start camera ───────────────────────────────────────────────────────────
   const startCamera = useCallback(async () => {
     try {
       setCameraError('');
+      setCapturedImage(null);
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Camera capture is not supported in this browser.');
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: 640, height: 480 }
       });
@@ -97,18 +107,23 @@ export default function FaceVerify() {
       // Live preview frames
       intervalRef.current = setInterval(() => {
         if (!videoRef.current || !videoRef.current.videoWidth) return;
-        const { dataUrl, brightness: b } = captureFrame(videoRef.current, 240);
-        setLivePreview(dataUrl);
+        const { brightness: b } = captureFrame(videoRef.current, 240);
         setBrightness(b);
       }, 200);
     } catch (e) {
-      setCameraError(`Camera access denied: ${e.message}`);
+      setStatus('failed');
+      setCameraActive(false);
+      setCameraError(e.message || 'Camera access was denied.');
+      addToast('Camera Unavailable', e.message || 'Please allow camera access and try again.', 'danger');
     }
-  }, []);
+  }, [addToast]);
 
   // ─── Stop camera ────────────────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
@@ -116,17 +131,24 @@ export default function FaceVerify() {
     if (videoRef.current) videoRef.current.srcObject = null;
     setCameraActive(false);
     setStatus('idle');
-    setLivePreview(null);
+    setBrightness(0);
   }, []);
 
-  useEffect(() => () => stopCamera(), [stopCamera]);
+  useEffect(() => () => {
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    stopCamera();
+  }, [stopCamera]);
 
   // ─── Capture face photo ─────────────────────────────────────────────────────
   const handleCapture = () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || !videoRef.current.videoWidth) {
+      addToast('Camera Warming Up', 'Please wait for the camera preview to appear.', 'info');
+      return;
+    }
+
     const { dataUrl, brightness: b } = captureFrame(videoRef.current, 320);
 
-    if (b < 0.05) {
+    if (b < 0.12) {
       addToast('Low Light', 'Face not clearly visible. Please improve lighting.', 'danger');
       return;
     }
@@ -147,21 +169,17 @@ export default function FaceVerify() {
         facePhoto: capturedImage, // store as data URL (use Storage in production)
       };
 
-      // Update in Firestore
-      if (hasFirebaseConfig) {
-        await updateItem('users', selectedGuard.id, patch);
-      }
-
-      // Update in local context
       await updateGuard(selectedGuard.id, patch);
+      setSelectedGuard((prev) => (prev ? { ...prev, ...patch } : prev));
 
       setStatus('success');
       addToast('Face Verified ✓', `${selectedGuard.name}'s identity has been confirmed.`, 'success');
 
-      // Auto reset
-      setTimeout(() => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = setTimeout(() => {
         setCapturedImage(null);
         setStatus('capturing');
+        resetTimerRef.current = null;
       }, 3000);
     } catch (e) {
       setStatus('failed');
@@ -175,9 +193,20 @@ export default function FaceVerify() {
   };
 
   const handleReset = () => {
+    if (resetTimerRef.current) {
+      clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = null;
+    }
     stopCamera();
-    setSelectedGuard(null);
     setCapturedImage(null);
+    setCameraError('');
+  };
+
+  const handleSelectGuard = (guard) => {
+    stopCamera();
+    setSelectedGuard(guard);
+    setCapturedImage(null);
+    setCameraError('');
   };
 
   const statusColor = {
@@ -227,10 +256,7 @@ export default function FaceVerify() {
                   key={guard.id}
                   guard={guard}
                   selected={selectedGuard?.id === guard.id}
-                  onClick={() => {
-                    setSelectedGuard(guard);
-                    handleReset();
-                  }}
+                  onClick={() => handleSelectGuard(guard)}
                 />
               ))}
             </div>
@@ -268,7 +294,7 @@ export default function FaceVerify() {
                 {statusLabel[status]}
               </div>
               {cameraActive && (
-                <button onClick={stopCamera} className="btn-secondary text-xs flex items-center gap-1.5">
+                <button onClick={handleReset} className="btn-secondary text-xs flex items-center gap-1.5">
                   <X className="h-3.5 w-3.5" /> Stop Camera
                 </button>
               )}
@@ -323,6 +349,7 @@ export default function FaceVerify() {
             {/* Brightness indicator */}
             {cameraActive && !capturedImage && (
               <div className="flex items-center gap-3 text-xs text-slate-400">
+                <SunMedium className="h-4 w-4 text-amber-400" />
                 <span>Lighting:</span>
                 <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                   <div
@@ -376,7 +403,13 @@ export default function FaceVerify() {
               )}
 
               {status === 'success' && (
-                <button onClick={handleReset} className="btn-secondary flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    handleReset();
+                    setSelectedGuard(null);
+                  }}
+                  className="btn-secondary flex items-center gap-2"
+                >
                   <RefreshCw className="h-4 w-4" /> Verify Another Guard
                 </button>
               )}
