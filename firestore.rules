@@ -66,6 +66,17 @@ service cloud.firestore {
       allow delete: if isSupervisor();
     }
 
+    // Face enrollment profiles for guard app login/attendance verification.
+    match /faceProfiles/{guardId} {
+      allow read: if isAuthed() && (
+        isSupervisor() ||
+        isSelf(guardId) ||
+        userDoc().data.guardId == guardId ||
+        userDoc().data.id == guardId
+      );
+      allow create, update, delete: if isSupervisor();
+    }
+
     // Checkpoint scan logs
     match /checkpoint_logs/{id} {
       allow read:   if isAuthed() && (isSupervisor() || resource.data.guardId == request.auth.uid);

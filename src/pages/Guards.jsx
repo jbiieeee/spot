@@ -268,7 +268,7 @@ export default function Guards() {
   return (
     <Layout
       title="Guards Directory & Personnel Roster"
-      subtitle="Enterprise Active Roster, Battery Telemetry, Face Verification & Device Assignment"
+      subtitle="Enterprise Active Roster, Battery Telemetry, Face Enrollment & Device Assignment"
     >
       <div className="space-y-6">
         {/* Header Controls */}

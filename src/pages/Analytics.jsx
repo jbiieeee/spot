@@ -23,7 +23,7 @@ export default function Analytics() {
     { label: 'Average Patrol Time', val: `${stats.avgPatrolDurationMinutes}m`, sub: '-2.1m vs last week', icon: Clock, color: 'text-blue-400' },
     { label: 'Average Delay', val: `${stats.avgDelayMinutes}m`, sub: 'Within 5m tolerance', icon: Clock, color: 'text-emerald-400' },
     { label: 'Average Attendance', val: `${stats.attendanceRate}%`, sub: '99.2% Target met', icon: UserCheck, color: 'text-emerald-400' },
-    { label: 'Face Verification Success', val: `${stats.faceVerificationSuccessRate}%`, sub: 'Biometric liveness pass', icon: ShieldCheck, color: 'text-blue-400' },
+    { label: 'Face Enrollment Rate', val: `${stats.faceVerificationSuccessRate}%`, sub: 'Enrolled guard profiles', icon: ShieldCheck, color: 'text-blue-400' },
     { label: 'Offline Sessions', val: `${stats.offlineSessionsCount}`, sub: 'Cached telemetry sync', icon: WifiOff, color: 'text-amber-400' },
     { label: 'Synchronization Success', val: `${stats.synchronizationSuccessRate}%`, sub: 'Cloud DB realtime', icon: RefreshCw, color: 'text-emerald-400' },
     { label: 'QR Completion Rate', val: `${stats.qrCompletionRate}%`, sub: 'Verified checkpoint scans', icon: QrCode, color: 'text-blue-400' },

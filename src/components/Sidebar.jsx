@@ -34,7 +34,7 @@ export default function Sidebar() {
     { label: 'Live Monitoring', path: '/tracking', icon: Radio, badge: 'LIVE' },
     { label: 'Patrol Operations', path: '/routes', icon: ShieldAlert },
     { label: 'Guards', path: '/guards', icon: Users },
-    { label: 'Face Verification', path: '/face-verify', icon: ScanFace },
+    { label: 'Face Enrollment', path: '/face-verify', icon: ScanFace },
     { label: 'Devices', path: '/devices', icon: Smartphone },
     { label: 'Deployment Sites', path: '/sites', icon: Building2 },
     { label: 'Clients', path: '/clients', icon: Briefcase },

@@ -1,5 +1,6 @@
 import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
-import { db, auth, hasFirebaseConfig } from './firebase';
+import { getDownloadURL, ref, uploadString } from 'firebase/storage';
+import { db, auth, hasFirebaseConfig, storage } from './firebase';
 
 const noop = () => {};
 
@@ -51,4 +52,12 @@ export async function updateItem(name, id, patch) {
 export async function removeItem(name, id) {
   await deleteDoc(doc(db, name, id));
   logAdminAction('DELETE', name, id, { id });
+}
+
+export async function uploadDataUrl(path, dataUrl) {
+  if (!hasFirebaseConfig || !storage || !dataUrl) return '';
+
+  const fileRef = ref(storage, path);
+  await uploadString(fileRef, dataUrl, 'data_url');
+  return getDownloadURL(fileRef);
 }

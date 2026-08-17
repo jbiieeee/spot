@@ -33,6 +33,36 @@ function captureFrame(videoEl, size = 320) {
   return { dataUrl: canvas.toDataURL('image/jpeg', 0.85), brightness };
 }
 
+function dataUrlToBlob(dataUrl) {
+  const [header, base64] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+  const bytes = atob(base64);
+  const buffer = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i += 1) {
+    buffer[i] = bytes.charCodeAt(i);
+  }
+  return new Blob([buffer], { type: mime });
+}
+
+async function detectFaces(dataUrl) {
+  if (!('FaceDetector' in window)) {
+    return { supported: false, faceDetected: true, faceCount: null };
+  }
+
+  const detector = new window.FaceDetector({ fastMode: false, maxDetectedFaces: 2 });
+  const bitmap = await createImageBitmap(dataUrlToBlob(dataUrl));
+  try {
+    const faces = await detector.detect(bitmap);
+    return {
+      supported: true,
+      faceDetected: faces.length > 0,
+      faceCount: faces.length,
+    };
+  } finally {
+    bitmap.close?.();
+  }
+}
+
 // ─── Guard selector pill ──────────────────────────────────────────────────────
 function GuardPill({ guard, selected, onClick }) {
   return (
@@ -58,7 +88,7 @@ function GuardPill({ guard, selected, onClick }) {
 }
 
 export default function FaceVerify() {
-  const { guards, addToast, updateGuard } = useSpot();
+  const { guards, addToast, enrollGuardFace } = useSpot();
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -69,7 +99,9 @@ export default function FaceVerify() {
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [capturedImage, setCapturedImage] = useState(null);
+  const [capturedFace, setCapturedFace] = useState(null);
   const [status, setStatus] = useState('idle'); // idle | capturing | verifying | success | failed
+  const [savingEnrollment, setSavingEnrollment] = useState(false);
   const [brightness, setBrightness] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -88,6 +120,7 @@ export default function FaceVerify() {
     try {
       setCameraError('');
       setCapturedImage(null);
+      setCapturedFace(null);
 
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('Camera capture is not supported in this browser.');
@@ -140,7 +173,7 @@ export default function FaceVerify() {
   }, [stopCamera]);
 
   // ─── Capture face photo ─────────────────────────────────────────────────────
-  const handleCapture = () => {
+  const handleCapture = async () => {
     if (!videoRef.current || !videoRef.current.videoWidth) {
       addToast('Camera Warming Up', 'Please wait for the camera preview to appear.', 'info');
       return;
@@ -154,41 +187,64 @@ export default function FaceVerify() {
     }
 
     setCapturedImage(dataUrl);
-    setStatus('verifying');
-  };
-
-  // ─── Verify (save photo + mark faceVerified = true) ─────────────────────────
-  const handleVerify = async () => {
-    if (!selectedGuard || !capturedImage) return;
+    setCapturedFace(null);
     setStatus('verifying');
 
     try {
-      const patch = {
-        faceVerified: true,
-        faceVerifiedAt: new Date().toLocaleString(),
-        facePhoto: capturedImage, // store as data URL (use Storage in production)
-      };
+      const result = await detectFaces(dataUrl);
+      if (result.supported && !result.faceDetected) {
+        setCapturedImage(null);
+        setStatus('capturing');
+        addToast('No Face Detected', 'Please center the guard face in the frame and capture again.', 'danger');
+        return;
+      }
 
-      await updateGuard(selectedGuard.id, patch);
+      setCapturedFace(result);
+      if (!result.supported) {
+        addToast('Manual Face Review', 'This browser cannot run native face detection. The captured photo can still be enrolled for the guard app.', 'info');
+      }
+    } catch (e) {
+      setCapturedFace({ supported: false, faceDetected: true, faceCount: null });
+      addToast('Face Detection Skipped', 'The photo was captured, but browser face detection was unavailable.', 'info');
+    }
+  };
+
+  // Save enrollment profile and attendance record.
+  const handleVerify = async () => {
+    if (!selectedGuard || !capturedImage || savingEnrollment) return;
+    setStatus('verifying');
+    setSavingEnrollment(true);
+
+    try {
+      const patch = await enrollGuardFace(selectedGuard, {
+        dataUrl: capturedImage,
+        faceDetectorSupported: Boolean(capturedFace?.supported),
+        faceDetected: capturedFace?.faceDetected !== false,
+        faceCount: capturedFace?.faceCount ?? null,
+      });
       setSelectedGuard((prev) => (prev ? { ...prev, ...patch } : prev));
 
       setStatus('success');
-      addToast('Face Verified ✓', `${selectedGuard.name}'s identity has been confirmed.`, 'success');
+      addToast('Face Profile Enrolled', `${selectedGuard.name}'s face profile was saved for guard app login.`, 'success');
 
       if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
       resetTimerRef.current = setTimeout(() => {
         setCapturedImage(null);
+        setCapturedFace(null);
         setStatus('capturing');
         resetTimerRef.current = null;
       }, 3000);
     } catch (e) {
       setStatus('failed');
-      addToast('Verification Failed', e.message || 'Could not save face data.', 'danger');
+      addToast('Enrollment Failed', e.message || 'Could not save face data.', 'danger');
+    } finally {
+      setSavingEnrollment(false);
     }
   };
 
   const handleRetake = () => {
     setCapturedImage(null);
+    setCapturedFace(null);
     setStatus('capturing');
   };
 
@@ -199,6 +255,8 @@ export default function FaceVerify() {
     }
     stopCamera();
     setCapturedImage(null);
+    setCapturedFace(null);
+    setSavingEnrollment(false);
     setCameraError('');
   };
 
@@ -206,6 +264,8 @@ export default function FaceVerify() {
     stopCamera();
     setSelectedGuard(guard);
     setCapturedImage(null);
+    setCapturedFace(null);
+    setSavingEnrollment(false);
     setCameraError('');
   };
 
@@ -221,14 +281,14 @@ export default function FaceVerify() {
     idle: 'Select a guard and start camera',
     capturing: 'Position face in frame, then capture',
     verifying: 'Review the captured photo',
-    success: 'Face verification complete!',
-    failed: 'Verification failed — please retry',
+    success: 'Face enrollment saved!',
+    failed: 'Enrollment failed - please retry',
   };
 
   return (
     <Layout
-      title="Face Verification Center"
-      subtitle="Capture and verify guard identity before shift — links face photo to guard record"
+      title="Face Enrollment Center"
+      subtitle="Capture a guard face profile for guard app login"
     >
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -276,8 +336,8 @@ export default function FaceVerify() {
               </div>
               <div className={`flex items-center justify-center gap-1.5 text-xs font-bold ${selectedGuard.faceVerified ? 'text-emerald-400' : 'text-amber-400'}`}>
                 {selectedGuard.faceVerified
-                  ? <><ShieldCheck className="h-3.5 w-3.5" /> Verified — {selectedGuard.faceVerifiedAt}</>
-                  : <><AlertTriangle className="h-3.5 w-3.5" /> Not Yet Verified</>}
+                  ? <><ShieldCheck className="h-3.5 w-3.5" /> Enrolled - {selectedGuard.faceVerifiedAt}</>
+                  : <><AlertTriangle className="h-3.5 w-3.5" /> Not Yet Enrolled</>}
               </div>
             </div>
           )}
@@ -395,9 +455,11 @@ export default function FaceVerify() {
                   </button>
                   <button
                     onClick={handleVerify}
-                    className="btn-primary flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500"
+                    disabled={savingEnrollment || (status === 'verifying' && !capturedFace)}
+                    className="btn-primary flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <ShieldCheck className="h-4 w-4" /> Confirm & Verify
+                    <ShieldCheck className="h-4 w-4" />
+                    {savingEnrollment ? 'Saving...' : status === 'verifying' && !capturedFace ? 'Checking Face...' : 'Save Face Enrollment'}
                   </button>
                 </>
               )}
@@ -410,7 +472,7 @@ export default function FaceVerify() {
                   }}
                   className="btn-secondary flex items-center gap-2"
                 >
-                  <RefreshCw className="h-4 w-4" /> Verify Another Guard
+                  <RefreshCw className="h-4 w-4" /> Enroll Another Guard
                 </button>
               )}
             </div>
@@ -422,14 +484,14 @@ export default function FaceVerify() {
             )}
           </div>
 
-          {/* Verified guards grid */}
+          {/* Enrolled guards grid */}
           <div className="card-spot p-5 space-y-3">
             <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Recently Verified Guards
+              Recently Enrolled Guards
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {guards.filter(g => g.faceVerified).length === 0 && (
-                <div className="col-span-3 text-xs text-slate-500 text-center py-4">No guards verified yet</div>
+                <div className="col-span-3 text-xs text-slate-500 text-center py-4">No guards enrolled yet</div>
               )}
               {guards.filter(g => g.faceVerified).map(g => (
                 <div key={g.id} className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
@@ -441,7 +503,7 @@ export default function FaceVerify() {
                   <div>
                     <div className="text-xs font-bold text-white">{g.name}</div>
                     <div className="text-[10px] text-emerald-400 flex items-center gap-1">
-                      <ShieldCheck className="h-2.5 w-2.5" /> Verified
+                      <ShieldCheck className="h-2.5 w-2.5" /> Enrolled
                     </div>
                   </div>
                 </div>

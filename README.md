@@ -7,6 +7,7 @@ The app uses Firebase Auth, Cloud Firestore, and Storage directly.
 
 - Dashboard, Guards, Checkpoints, Routes, Schedules, Patrol Logs, and Incidents
 - Firebase Auth supervisor sign-in
+- Guard face enrollment records for app-side login/attendance checks
 - Real-time Firestore listeners with persistent offline cache
 - QR code generator for checkpoints
 - CSV export for patrol logs
@@ -51,7 +52,13 @@ active   (boolean) = true
 | `routes`      | Ordered checkpoint sequences |
 | `schedules`   | Guard shift assignments |
 | `patrolLogs`  | Field scan records |
+| `faceProfiles` | Enrolled guard face photos and detection metadata |
+| `attendance`  | Guard time-in/time-out and face enrollment/login events |
 | `incidents`   | Guard incident reports |
+
+## Face Enrollment Notes
+
+The web dashboard captures and stores an enrolled guard face profile; it does not perform full biometric identity matching by itself. When supported by the browser, native face detection is used to confirm that a face is present before enrollment. The guard/mobile app can read `faceProfiles/{guardId}` after the guard is authenticated and use its own on-device or backend biometric matcher for face login.
 
 ## Project Structure
 

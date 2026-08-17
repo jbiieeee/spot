@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { db, hasFirebaseConfig } from '../lib/firebase';
-import { subscribeCollection, updateItem, addItem, removeItem } from '../lib/dataSource';
+import { subscribeCollection, updateItem, addItem, removeItem, setItem, uploadDataUrl } from '../lib/dataSource';
 
 const SpotContext = createContext();
 
@@ -178,6 +178,9 @@ export function SpotProvider({ children }) {
           gpsLng: u.gpsLng || u.lng || 121.0244,
           faceVerified: Boolean(u.faceVerified),
           faceVerifiedAt: u.faceVerifiedAt || 'Pending',
+          faceEnrollmentStatus: u.faceEnrollmentStatus || (u.faceVerified ? 'enrolled' : 'pending'),
+          faceProfileId: u.faceProfileId || null,
+          facePhotoUrl: u.facePhotoUrl || u.facePhoto || '',
           currentPatrolName: u.currentPatrolName || '',
           progressPct: u.progressPct || 0,
           completedCheckpoints: u.completedCheckpoints || 0,
@@ -419,6 +422,83 @@ export function SpotProvider({ children }) {
       }
     }
     addToast('Guard Updated', `Guard record has been updated.`, 'info');
+  };
+
+  const enrollGuardFace = async (guard, capture) => {
+    if (!guard?.id) throw new Error('Select a guard before enrolling a face.');
+    if (!capture?.dataUrl) throw new Error('Capture a face photo before enrolling.');
+
+    const enrolledAt = new Date();
+    const enrolledAtLabel = enrolledAt.toLocaleString();
+    const storagePath = `faceProfiles/${guard.id}/enrollment-${enrolledAt.getTime()}.jpg`;
+    let facePhotoUrl = '';
+
+    if (hasFirebaseConfig && db) {
+      try {
+        facePhotoUrl = await uploadDataUrl(storagePath, capture.dataUrl);
+      } catch (e) {
+        console.warn('Firebase Storage face upload:', e);
+      }
+    }
+
+    const userPatch = {
+      faceVerified: true,
+      faceVerifiedAt: enrolledAtLabel,
+      faceEnrollmentStatus: 'enrolled',
+      faceProfileId: guard.id,
+      facePhotoUrl: facePhotoUrl || guard.facePhotoUrl || '',
+      faceDetectorSupported: Boolean(capture.faceDetectorSupported),
+      faceDetected: capture.faceDetected !== false,
+    };
+
+    if (!facePhotoUrl) {
+      userPatch.facePhoto = capture.dataUrl;
+    }
+
+    const faceProfile = {
+      guardId: guard.id,
+      guardName: guard.name || 'Guard',
+      siteId: guard.siteId || '',
+      siteName: guard.siteName || '',
+      imageUrl: facePhotoUrl,
+      imageDataUrl: facePhotoUrl ? '' : capture.dataUrl,
+      storagePath: facePhotoUrl ? storagePath : '',
+      faceDetected: capture.faceDetected !== false,
+      faceCount: capture.faceCount ?? null,
+      detector: capture.faceDetectorSupported ? 'browser-face-detector' : 'manual-review',
+      source: 'web-command-center',
+      enrolledAt: enrolledAt.toISOString(),
+      updatedAt: enrolledAt.toISOString(),
+    };
+
+    const attendanceRecord = {
+      guardId: guard.id,
+      guardName: guard.name || 'Guard',
+      siteId: guard.siteId || '',
+      siteName: guard.siteName || '',
+      date: enrolledAt.toLocaleDateString(),
+      timeIn: enrolledAt.toISOString(),
+      timestamp: enrolledAt.toISOString(),
+      status: 'Face Enrolled',
+      faceVerified: true,
+      source: 'web-command-center',
+    };
+
+    setGuards((prev) => prev.map((g) => (g.id === guard.id ? { ...g, ...userPatch } : g)));
+
+    if (hasFirebaseConfig && db) {
+      try {
+        await setItem('faceProfiles', guard.id, faceProfile);
+        await updateItem('users', guard.id, userPatch);
+        await addItem('attendance', attendanceRecord);
+      } catch (e) {
+        console.warn('Firestore face enrollment:', e);
+        throw e;
+      }
+    }
+
+    addToast('Face Enrollment Saved', `${guard.name}'s face profile is ready for guard app login.`, 'success');
+    return { ...userPatch, faceProfile };
   };
 
   const deleteGuard = async (id) => {
@@ -736,6 +816,7 @@ export function SpotProvider({ children }) {
         // Guards CRUD
         addGuard,
         updateGuard,
+        enrollGuardFace,
         deleteGuard,
         // Sites CRUD
         addSite,
