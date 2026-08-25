@@ -32,7 +32,12 @@ export function AuthProvider({ children }) {
           try {
             if (db) {
               const snap = await getDoc(doc(db, 'users', u.uid));
-              setProfile(snap.exists() ? { id: u.uid, ...snap.data() } : { id: u.uid, role: 'supervisor', name: u.displayName || u.email, agency: 'S.P.O.T Command HQ', phone: '' });
+              const profileData = snap.exists() ? snap.data() : {};
+              const normalizedRole = String(profileData.role || 'supervisor').trim().toLowerCase();
+              setProfile(snap.exists()
+                ? { id: u.uid, ...profileData, role: normalizedRole }
+                : { id: u.uid, role: 'supervisor', name: u.displayName || u.email, agency: 'S.P.O.T Command HQ', phone: '' }
+              );
             } else {
               setProfile({ id: u.uid, role: 'supervisor', name: u.displayName || u.email, agency: 'S.P.O.T Command HQ', phone: '' });
             }
@@ -76,7 +81,7 @@ export function AuthProvider({ children }) {
         id: uid,
         name: trimmedEmail.split('@')[0].toUpperCase(),
         email: trimmedEmail,
-        role: 'Supervisor Command Officer',
+        role: 'supervisor',
         agency: 'S.P.O.T Command HQ',
         phone: '+63 917 555 0100'
       };
@@ -104,9 +109,10 @@ export function AuthProvider({ children }) {
     const trimmedName = name?.trim();
     if (!trimmedName) throw new Error('Display name is required.');
 
+    const normalizedRole = String(role || profile?.role || 'supervisor').trim().toLowerCase();
     const patch = {
       name: trimmedName,
-      role: role || profile?.role || 'supervisor',
+      role: normalizedRole,
       agency: agency || profile?.agency || 'S.P.O.T Command HQ',
       phone: phone || profile?.phone || ''
     };

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Layout from '../components/Layout';
+import GuardAvatar from '../components/GuardAvatar';
 import { useSpot } from '../context/SpotContext';
 import {
   Building2, Users, MapPin, AlertTriangle, X, Plus, Pencil, Trash2, Check,
@@ -797,7 +798,7 @@ export default function Sites() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {assignedGuards.map((g) => (
                     <div key={g.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-900/40 text-xs">
-                      <img src={g.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80'} alt={g.name} className="h-9 w-9 rounded-full object-cover" />
+                      <GuardAvatar photo={g.photo} name={g.name} size="h-9 w-9" />
                       <div className="flex-1 min-w-0">
                         <div className="font-bold text-white truncate">{g.name}</div>
                         <div className="text-slate-400">{g.shift}</div>

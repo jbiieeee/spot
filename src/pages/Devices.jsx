@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Layout from '../components/Layout';
+import GuardAvatar from '../components/GuardAvatar';
 import { useSpot } from '../context/SpotContext';
 import { Smartphone, RefreshCw, Link, Unlink, Search, Wifi } from 'lucide-react';
 
@@ -154,11 +155,7 @@ export default function Devices() {
                         <td className="px-6 py-4">
                           {boundGuard ? (
                             <div className="flex items-center gap-2">
-                              <img
-                                src={boundGuard.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80'}
-                                alt={boundGuard.name}
-                                className="h-7 w-7 rounded-full object-cover border border-blue-500/40"
-                              />
+                              <GuardAvatar photo={boundGuard.photo} name={boundGuard.name} size="h-7 w-7" />
                               <div>
                                 <div className="text-xs font-bold text-white">{boundGuard.name}</div>
                                 <div className="text-[10px] text-slate-500">{boundGuard.siteName}</div>

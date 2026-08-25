@@ -1,6 +1,7 @@
 import { deleteApp, initializeApp } from 'firebase/app';
 import { getAnalytics, isSupported as isAnalyticsSupported } from 'firebase/analytics';
 import { getAuth } from 'firebase/auth';
+import { getFunctions } from 'firebase/functions';
 import {
   initializeFirestore,
   persistentLocalCache,
@@ -26,6 +27,7 @@ export const hasFirebaseConfig = Boolean(
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const functions = getFunctions(app);
 
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })

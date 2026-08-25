@@ -166,7 +166,7 @@ export function SpotProvider({ children }) {
         .map((u) => ({
           id: u.id,
           name: u.name || u.displayName || u.email || 'Guard Personnel',
-          photo: u.photo || u.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
+          photo: u.photo || u.photoUrl || '',
           client: u.client || 'Client',
           siteId: u.siteId || 'SITE-01',
           siteName: u.siteName || 'Assigned Site',
@@ -252,7 +252,7 @@ export function SpotProvider({ children }) {
       id: doc.id,
       guardId: doc.guardId || 'N/A',
       guardName: doc.guardName || 'Guard',
-      guardPhoto: doc.guardPhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
+      guardPhoto: doc.guardPhoto || '',
       siteName: doc.siteName || 'Site',
       routeName: doc.routeName || doc.routeId || 'Patrol Route',
       status: doc.status || 'In Progress',
@@ -374,9 +374,22 @@ export function SpotProvider({ children }) {
   // -------------------------------------------------------------
   // CRUD — Guards
   // -------------------------------------------------------------
+  const persistGuardPhoto = async (guardId, photo) => {
+    if (!photo?.startsWith('data:') || !hasFirebaseConfig || !db) return photo || '';
+
+    try {
+      return await uploadDataUrl(`guardProfiles/${guardId}/profile-photo`, photo);
+    } catch (e) {
+      console.warn('Firebase Storage guard photo upload:', e);
+      return photo;
+    }
+  };
+
   const addGuard = async (newGuard) => {
+    const guardId = `G-${Date.now().toString().slice(-4)}`;
+    const photo = await persistGuardPhoto(guardId, newGuard.photo);
     const created = {
-      id: `G-${Date.now().toString().slice(-4)}`,
+      id: guardId,
       name: newGuard.name,
       client: newGuard.client || 'Client Account',
       siteName: newGuard.siteName || 'Main Facility',
@@ -396,7 +409,7 @@ export function SpotProvider({ children }) {
       phone: newGuard.phone || '+63 917 000 0000',
       performanceRating: 100,
       attendanceRate: 100,
-      photo: newGuard.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
+      photo,
       role: 'guard'
     };
 
@@ -413,10 +426,13 @@ export function SpotProvider({ children }) {
   };
 
   const updateGuard = async (id, patch) => {
-    setGuards((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+    const persistedPatch = patch.photo !== undefined
+      ? { ...patch, photo: await persistGuardPhoto(id, patch.photo) }
+      : patch;
+    setGuards((prev) => prev.map((g) => (g.id === id ? { ...g, ...persistedPatch } : g)));
     if (hasFirebaseConfig && db) {
       try {
-        await updateItem('users', id, patch);
+        await updateItem('users', id, persistedPatch);
       } catch (e) {
         console.warn('Firestore update user:', e);
       }
@@ -499,6 +515,34 @@ export function SpotProvider({ children }) {
 
     addToast('Face Enrollment Saved', `${guard.name}'s face profile is ready for guard app login.`, 'success');
     return { ...userPatch, faceProfile };
+  };
+
+  const deleteGuardFace = async (guard) => {
+    if (!guard?.id) throw new Error('Select a guard before deleting face recognition.');
+
+    const userPatch = {
+      faceVerified: false,
+      faceVerifiedAt: 'Pending',
+      faceEnrollmentStatus: 'pending',
+      faceProfileId: null,
+      facePhotoUrl: '',
+      facePhoto: '',
+      faceDetected: false,
+      faceDetectorSupported: false,
+    };
+
+    setGuards((prev) => prev.map((g) => (g.id === guard.id ? { ...g, ...userPatch } : g)));
+
+    if (hasFirebaseConfig && db) {
+      try {
+        await removeItem('faceProfiles', guard.id);
+      } catch (e) {
+        if (e.code !== 'not-found') throw e;
+      }
+      await updateItem('users', guard.id, userPatch);
+    }
+
+    addToast('Face Recognition Deleted', `${guard.name}'s profile can now be enrolled again.`, 'success');
   };
 
   const deleteGuard = async (id) => {
@@ -726,7 +770,7 @@ export function SpotProvider({ children }) {
       id: `PAT-${Date.now().toString().slice(-4)}`,
       guardId: newPatrol.guardId || 'G-100',
       guardName: newPatrol.guardName || 'Assigned Guard',
-      guardPhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
+      guardPhoto: '',
       siteName: newPatrol.siteName || 'Facility Site',
       routeName: newPatrol.routeName || 'Perimeter Sweep',
       status: 'In Progress',
@@ -817,6 +861,7 @@ export function SpotProvider({ children }) {
         addGuard,
         updateGuard,
         enrollGuardFace,
+        deleteGuardFace,
         deleteGuard,
         // Sites CRUD
         addSite,

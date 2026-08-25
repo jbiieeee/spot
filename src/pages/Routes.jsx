@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Layout from '../components/Layout';
+import GuardAvatar from '../components/GuardAvatar';
 import { useSpot } from '../context/SpotContext';
 import {
   ShieldAlert,
@@ -75,11 +76,7 @@ export default function PatrolOperations() {
 
                 {/* Guard & Site */}
                 <div className="flex items-center gap-3 mb-4">
-                  <img
-                    src={patrol.guardPhoto}
-                    alt={patrol.guardName}
-                    className="h-10 w-10 rounded-full object-cover border border-blue-500/40"
-                  />
+                  <GuardAvatar photo={patrol.guardPhoto} name={patrol.guardName} />
                   <div>
                     <h4 className="text-sm font-bold text-white">{patrol.guardName}</h4>
                     <p className="text-xs text-slate-400">{patrol.siteName}</p>
@@ -152,7 +149,7 @@ export default function PatrolOperations() {
                 {/* Guard Banner */}
                 <div className="flex items-center justify-between p-4 rounded-xl bg-slate-900/60 border border-slate-800">
                   <div className="flex items-center gap-3">
-                    <img src={selectedPatrol.guardPhoto} alt={selectedPatrol.guardName} className="h-10 w-10 rounded-full object-cover" />
+                    <GuardAvatar photo={selectedPatrol.guardPhoto} name={selectedPatrol.guardName} />
                     <div>
                       <div className="font-bold text-white text-sm">{selectedPatrol.guardName}</div>
                       <div className="text-xs text-slate-400">{selectedPatrol.siteName}</div>

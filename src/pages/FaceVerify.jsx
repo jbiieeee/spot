@@ -1,6 +1,10 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
+import GuardAvatar from '../components/GuardAvatar';
 import { useSpot } from '../context/SpotContext';
+import { useAuth } from '../context/AuthContext';
+import { estimateFaceMatchScore } from '../lib/faceRecognition';
+import { hasFaceApiConfig, verifyFaceWithApi } from '../lib/faceApi';
 import {
   Camera, ShieldCheck, X, ScanFace, AlertTriangle, CheckCircle2,
   RefreshCw, UserCheck, SunMedium
@@ -63,6 +67,33 @@ async function detectFaces(dataUrl) {
   }
 }
 
+async function getReferenceFaceDataUrl(guard) {
+  if (!guard) return null;
+
+  const candidateUrls = [guard.facePhoto, guard.facePhotoUrl];
+  for (const value of candidateUrls) {
+    if (!value) continue;
+    if (value.startsWith('data:')) return value;
+    if (value.startsWith('http')) {
+      try {
+        const response = await fetch(value);
+        if (!response.ok) continue;
+        const blob = await response.blob();
+        return await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return null;
+}
+
 // ─── Guard selector pill ──────────────────────────────────────────────────────
 function GuardPill({ guard, selected, onClick }) {
   return (
@@ -74,11 +105,7 @@ function GuardPill({ guard, selected, onClick }) {
           : 'border-slate-700 bg-slate-900/60 text-slate-400 hover:border-slate-500'
       }`}
     >
-      <img
-        src={guard.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80'}
-        alt={guard.name}
-        className="h-6 w-6 rounded-full object-cover border border-slate-600"
-      />
+      <GuardAvatar photo={guard.photo} name={guard.name} size="h-6 w-6" />
       <span className="font-semibold">{guard.name}</span>
       {guard.faceVerified && (
         <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
@@ -88,7 +115,9 @@ function GuardPill({ guard, selected, onClick }) {
 }
 
 export default function FaceVerify() {
-  const { guards, addToast, enrollGuardFace } = useSpot();
+  const { guards, addToast, enrollGuardFace, deleteGuardFace } = useSpot();
+  const { profile } = useAuth();
+  const canManageFaceProfiles = ['admin', 'supervisor'].includes(String(profile?.role || '').toLowerCase());
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -199,12 +228,50 @@ export default function FaceVerify() {
         return;
       }
 
-      setCapturedFace(result);
+      let aiMatchScore = null;
+      let aiMatch = null;
+      const referenceFace = await getReferenceFaceDataUrl(selectedGuard);
+
+      if (referenceFace) {
+        if (hasFaceApiConfig()) {
+          try {
+            const apiResult = await verifyFaceWithApi(dataUrl, referenceFace);
+            if (apiResult) {
+              aiMatchScore = Number(apiResult.score || 0);
+              aiMatch = Boolean(apiResult.success);
+              if (apiResult.success) {
+                addToast('Azure Face Verified', `${selectedGuard.name} matched the enrolled face profile with ${(aiMatchScore * 100).toFixed(0)}% confidence.`, 'success');
+              }
+            }
+          } catch (apiError) {
+            console.warn('Azure Face verification failed, falling back to heuristic:', apiError);
+          }
+        }
+
+        if (aiMatchScore === null) {
+          aiMatchScore = estimateFaceMatchScore(dataUrl, referenceFace);
+          aiMatch = aiMatchScore >= 0.72;
+        }
+      }
+
+      const nextFaceCheck = {
+        ...result,
+        aiMatchScore,
+        aiMatch,
+        referenceAvailable: Boolean(referenceFace),
+      };
+
+      setCapturedFace(nextFaceCheck);
+
+      if (referenceFace && aiMatchScore !== null && !aiMatch) {
+        addToast('AI Face Mismatch', `Similarity score ${aiMatchScore.toFixed(2)} is too low for ${selectedGuard.name}. Please retake the photo or select the correct guard.`, 'warning');
+      }
+
       if (!result.supported) {
         addToast('Manual Face Review', 'This browser cannot run native face detection. The captured photo can still be enrolled for the guard app.', 'info');
       }
     } catch (e) {
-      setCapturedFace({ supported: false, faceDetected: true, faceCount: null });
+      setCapturedFace({ supported: false, faceDetected: true, faceCount: null, aiMatchScore: null, aiMatch: null, referenceAvailable: false });
       addToast('Face Detection Skipped', 'The photo was captured, but browser face detection was unavailable.', 'info');
     }
   };
@@ -212,6 +279,13 @@ export default function FaceVerify() {
   // Save enrollment profile and attendance record.
   const handleVerify = async () => {
     if (!selectedGuard || !capturedImage || savingEnrollment) return;
+
+    if (capturedFace?.referenceAvailable && capturedFace.aiMatch === false) {
+      setStatus('failed');
+      addToast('AI Face Mismatch', `Similarity score ${((capturedFace.aiMatchScore ?? 0)).toFixed(2)} is too low. Please retake the face or pick the correct guard.`, 'danger');
+      return;
+    }
+
     setStatus('verifying');
     setSavingEnrollment(true);
 
@@ -221,6 +295,8 @@ export default function FaceVerify() {
         faceDetectorSupported: Boolean(capturedFace?.supported),
         faceDetected: capturedFace?.faceDetected !== false,
         faceCount: capturedFace?.faceCount ?? null,
+        aiMatchScore: capturedFace?.aiMatchScore ?? null,
+        aiMatch: capturedFace?.aiMatch ?? null,
       });
       setSelectedGuard((prev) => (prev ? { ...prev, ...patch } : prev));
 
@@ -258,6 +334,26 @@ export default function FaceVerify() {
     setCapturedFace(null);
     setSavingEnrollment(false);
     setCameraError('');
+  };
+
+  const handleDeleteEnrollment = async () => {
+    if (!selectedGuard || !canManageFaceProfiles || !window.confirm(`Delete face recognition for ${selectedGuard.name}? They will need to be enrolled again.`)) return;
+
+    try {
+      await deleteGuardFace(selectedGuard);
+      handleReset();
+      setSelectedGuard((prev) => (prev ? {
+        ...prev,
+        faceVerified: false,
+        faceVerifiedAt: 'Pending',
+        faceEnrollmentStatus: 'pending',
+        faceProfileId: null,
+        facePhotoUrl: '',
+        facePhoto: '',
+      } : prev));
+    } catch (e) {
+      addToast('Delete Failed', e.message || 'Could not delete the face profile.', 'danger');
+    }
   };
 
   const handleSelectGuard = (guard) => {
@@ -325,11 +421,7 @@ export default function FaceVerify() {
           {/* Selected guard detail */}
           {selectedGuard && (
             <div className="card-spot p-5 space-y-3">
-              <img
-                src={selectedGuard.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80'}
-                alt={selectedGuard.name}
-                className="h-20 w-20 rounded-2xl object-cover border-2 border-blue-500/40 mx-auto block"
-              />
+              <GuardAvatar photo={selectedGuard.photo} name={selectedGuard.name} size="h-20 w-20" rounded="rounded-2xl" />
               <div className="text-center">
                 <div className="text-sm font-bold text-white">{selectedGuard.name}</div>
                 <div className="text-xs text-slate-400">{selectedGuard.siteName}</div>
@@ -339,6 +431,14 @@ export default function FaceVerify() {
                   ? <><ShieldCheck className="h-3.5 w-3.5" /> Enrolled - {selectedGuard.faceVerifiedAt}</>
                   : <><AlertTriangle className="h-3.5 w-3.5" /> Not Yet Enrolled</>}
               </div>
+                {canManageFaceProfiles && selectedGuard.faceVerified && (
+                  <button
+                    onClick={handleDeleteEnrollment}
+                    className="btn-secondary w-full text-xs text-rose-400 hover:text-rose-300"
+                  >
+                    Delete Face Recognition
+                  </button>
+                )}
             </div>
           )}
         </div>
@@ -423,6 +523,33 @@ export default function FaceVerify() {
               </div>
             )}
 
+            {capturedFace && (
+              <div className="rounded-xl border border-slate-700 bg-slate-950/80 p-3 text-xs text-slate-300">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-semibold text-slate-200">AI Face Check</span>
+                  {capturedFace.aiMatchScore !== null && (
+                    <span className={`font-bold ${capturedFace.aiMatch ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {capturedFace.aiMatchScore.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-slate-400">
+                  <span>Browser detection</span>
+                  <span className={capturedFace.faceDetected ? 'text-emerald-400' : 'text-rose-400'}>
+                    {capturedFace.faceDetected ? 'Face found' : 'No face found'}
+                  </span>
+                </div>
+                {capturedFace.aiMatchScore !== null && (
+                  <div className="mt-1 flex items-center justify-between gap-3 text-[11px] text-slate-400">
+                    <span>AI similarity</span>
+                    <span className={capturedFace.aiMatch ? 'text-emerald-400' : 'text-amber-400'}>
+                      {capturedFace.aiMatch ? 'Match' : 'Review'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Action buttons */}
             <div className="flex gap-3 justify-center flex-wrap">
               {!cameraActive && !capturedImage && (
@@ -495,11 +622,7 @@ export default function FaceVerify() {
               )}
               {guards.filter(g => g.faceVerified).map(g => (
                 <div key={g.id} className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
-                  <img
-                    src={g.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80'}
-                    alt={g.name}
-                    className="h-8 w-8 rounded-full object-cover border border-emerald-500/40"
-                  />
+                  <GuardAvatar photo={g.photo} name={g.name} size="h-8 w-8" />
                   <div>
                     <div className="text-xs font-bold text-white">{g.name}</div>
                     <div className="text-[10px] text-emerald-400 flex items-center gap-1">

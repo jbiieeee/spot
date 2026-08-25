@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Battery, MapPin, ShieldCheck, Phone, AlertTriangle, Activity, Calendar, Award, CheckCircle } from 'lucide-react';
 import { useSpot } from '../context/SpotContext';
+import GuardAvatar from './GuardAvatar';
 
 export default function GuardDetailDrawer() {
   const { isGuardDrawerOpen, closeGuardDrawer, selectedGuard, addToast } = useSpot();
@@ -30,11 +31,7 @@ export default function GuardDetailDrawer() {
 
             {/* Profile Overview */}
             <div className="mt-6 flex items-center gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-              <img
-                src={selectedGuard.photo}
-                alt={selectedGuard.name}
-                className="h-16 w-16 rounded-2xl object-cover border-2 border-blue-500/40 shadow-lg"
-              />
+              <GuardAvatar photo={selectedGuard.photo} name={selectedGuard.name} size="h-16 w-16" rounded="rounded-2xl" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
                   <h3 className="truncate text-base font-bold text-white">{selectedGuard.name}</h3>

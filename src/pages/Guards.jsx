@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Layout from '../components/Layout';
+import GuardAvatar from '../components/GuardAvatar';
 import { useSpot } from '../context/SpotContext';
 import {
   Users, Search, Battery, ShieldCheck, Eye, Plus, Pencil, Trash2, X,
@@ -39,6 +40,16 @@ function Field({ label, children }) {
 
 // ─── Guard Form Fields ────────────────────────────────────────────────────────
 function GuardFormFields({ form, onChange }) {
+  const handlePhotoUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) return;
+
+    const reader = new FileReader();
+    reader.onload = () => onChange('photo', reader.result);
+    reader.readAsDataURL(file);
+  };
+
   return (
     <>
       <div className="grid grid-cols-2 gap-4">
@@ -73,8 +84,20 @@ function GuardFormFields({ form, onChange }) {
           </select>
         </Field>
       </div>
-      <Field label="Photo URL (optional)">
-        <input className="input-spot" value={form.photo} onChange={e => onChange('photo', e.target.value)} placeholder="https://..." />
+      <Field label="Profile Photo (optional)">
+        <div className="flex items-center gap-3">
+          <GuardAvatar photo={form.photo} name={form.name} />
+          <label className="btn-secondary cursor-pointer text-xs">
+            Upload Photo
+            <input type="file" accept="image/*" className="sr-only" onChange={handlePhotoUpload} />
+          </label>
+          {form.photo && (
+            <button type="button" onClick={() => onChange('photo', '')} className="text-xs text-slate-400 hover:text-white">
+              Remove
+            </button>
+          )}
+        </div>
+        <p className="text-[11px] text-slate-500">JPG, PNG, or WebP up to 5 MB. A neutral profile is used when no photo is set.</p>
       </Field>
     </>
   );
@@ -357,11 +380,7 @@ export default function Guards() {
                       {/* Guard Info */}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <img
-                            src={guard.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80'}
-                            alt={guard.name}
-                            className="h-10 w-10 rounded-full object-cover border border-blue-500/40"
-                          />
+                          <GuardAvatar photo={guard.photo} name={guard.name} />
                           <div>
                             <div className="font-bold text-white text-sm">{guard.name}</div>
                             <div className="text-xs font-mono text-blue-400">{guard.id}</div>

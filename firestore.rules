@@ -8,7 +8,14 @@ service cloud.firestore {
     // Helper: get the caller's user profile
     function userDoc()  { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
     function isAuthed() { return request.auth != null; }
-    function isSupervisor() { return isAuthed() && userDoc().data.role == 'supervisor'; }
+    function isSupervisor() {
+      return isAuthed() && (
+        userDoc().data.role == 'admin' ||
+        userDoc().data.role == 'supervisor' ||
+        userDoc().data.role == 'Supervisor Command Officer' ||
+        userDoc().data.role == 'supervisor command officer'
+      );
+    }
     function isSelf(uid)    { return isAuthed() && request.auth.uid == uid; }
 
     // /users : supervisors manage all; a guard can read/update their own doc
