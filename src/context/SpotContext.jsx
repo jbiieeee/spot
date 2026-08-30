@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { db, hasFirebaseConfig } from '../lib/firebase';
-import { subscribeCollection, updateItem, addItem, removeItem, setItem, uploadDataUrl } from '../lib/dataSource';
+import { subscribeCollection, updateItem, addItem, removeItem, setItem } from '../lib/dataSource';
 
 const SpotContext = createContext();
 
@@ -41,6 +41,7 @@ export function SpotProvider({ children }) {
   const [devices, setDevices] = useState([]);
   const [attendance, setAttendance] = useState([]);
   const [checkpointLogs, setCheckpointLogs] = useState([]);
+  const [guardLocations, setGuardLocations] = useState({});
 
   // Database Connection Indicator
   const [dbConnected, setDbConnected] = useState(Boolean(hasFirebaseConfig && db));
@@ -354,6 +355,28 @@ export function SpotProvider({ children }) {
       setCheckpointLogs(formatted);
     });
 
+    // 10. Guard live locations (from Android app GPS service)
+    const unsubGuardLocations = subscribeCollection('guardLocations', (fsDocs) => {
+      const locationMap = {};
+      (fsDocs || []).forEach((doc) => {
+        locationMap[doc.id] = {
+          id: doc.id,
+          lat: doc.lat ?? doc.gpsLat ?? null,
+          lng: doc.lng ?? doc.gpsLng ?? null,
+          accuracy: doc.accuracy ?? null,
+          speed: doc.speed ?? null,
+          bearing: doc.bearing ?? null,
+          altitude: doc.altitude ?? null,
+          battery: doc.battery ?? null,
+          activityType: doc.activityType || 'unknown',
+          networkType: doc.networkType || 'unknown',
+          patrolSessionId: doc.patrolSessionId || null,
+          timestamp: doc.timestamp?.toDate ? doc.timestamp.toDate() : null,
+        };
+      });
+      setGuardLocations(locationMap);
+    });
+
     setDbConnected(true);
 
     return () => {
@@ -368,26 +391,18 @@ export function SpotProvider({ children }) {
       unsubDevices();
       unsubAttendance();
       unsubCheckpointLogs();
+      unsubGuardLocations();
     };
   }, []);
 
   // -------------------------------------------------------------
   // CRUD — Guards
   // -------------------------------------------------------------
-  const persistGuardPhoto = async (guardId, photo) => {
-    if (!photo?.startsWith('data:') || !hasFirebaseConfig || !db) return photo || '';
-
-    try {
-      return await uploadDataUrl(`guardProfiles/${guardId}/profile-photo`, photo);
-    } catch (e) {
-      console.warn('Firebase Storage guard photo upload:', e);
-      return photo;
-    }
-  };
+  const persistGuardPhoto = (photo) => photo || '';
 
   const addGuard = async (newGuard) => {
     const guardId = `G-${Date.now().toString().slice(-4)}`;
-    const photo = await persistGuardPhoto(guardId, newGuard.photo);
+    const photo = persistGuardPhoto(newGuard.photo);
     const created = {
       id: guardId,
       name: newGuard.name,
@@ -427,7 +442,7 @@ export function SpotProvider({ children }) {
 
   const updateGuard = async (id, patch) => {
     const persistedPatch = patch.photo !== undefined
-      ? { ...patch, photo: await persistGuardPhoto(id, patch.photo) }
+      ? { ...patch, photo: persistGuardPhoto(patch.photo) }
       : patch;
     setGuards((prev) => prev.map((g) => (g.id === id ? { ...g, ...persistedPatch } : g)));
     if (hasFirebaseConfig && db) {
@@ -446,16 +461,7 @@ export function SpotProvider({ children }) {
 
     const enrolledAt = new Date();
     const enrolledAtLabel = enrolledAt.toLocaleString();
-    const storagePath = `faceProfiles/${guard.id}/enrollment-${enrolledAt.getTime()}.jpg`;
-    let facePhotoUrl = '';
-
-    if (hasFirebaseConfig && db) {
-      try {
-        facePhotoUrl = await uploadDataUrl(storagePath, capture.dataUrl);
-      } catch (e) {
-        console.warn('Firebase Storage face upload:', e);
-      }
-    }
+    const facePhotoUrl = '';
 
     const userPatch = {
       faceVerified: true,
@@ -478,7 +484,7 @@ export function SpotProvider({ children }) {
       siteName: guard.siteName || '',
       imageUrl: facePhotoUrl,
       imageDataUrl: facePhotoUrl ? '' : capture.dataUrl,
-      storagePath: facePhotoUrl ? storagePath : '',
+      storagePath: '',
       faceDetected: capture.faceDetected !== false,
       faceCount: capture.faceCount ?? null,
       detector: capture.faceDetectorSupported ? 'browser-face-detector' : 'manual-review',
@@ -762,6 +768,25 @@ export function SpotProvider({ children }) {
     }
   };
 
+  const deleteDevice = async (device) => {
+    if (!device?.id) throw new Error('Select a registered device before deleting.');
+
+    const affectedGuards = guards.filter((guard) => guard.deviceId === device.deviceId);
+    setDevices((prev) => prev.filter((item) => item.id !== device.id));
+    setGuards((prev) => prev.map((guard) => (
+      guard.deviceId === device.deviceId ? { ...guard, deviceId: null } : guard
+    )));
+
+    if (hasFirebaseConfig && db) {
+      await removeItem('devices', device.id);
+      await Promise.all(affectedGuards.map((guard) => (
+        updateItem('users', guard.id, { deviceId: null })
+      )));
+    }
+
+    addToast('Device Deleted', `${device.deviceId} was removed from registered devices.`, 'success');
+  };
+
   // -------------------------------------------------------------
   // CRUD — Patrols
   // -------------------------------------------------------------
@@ -847,6 +872,7 @@ export function SpotProvider({ children }) {
         devices,
         attendance,
         checkpointLogs,
+        guardLocations,
         stats,
         selectedGuard,
         isGuardDrawerOpen,
@@ -879,6 +905,7 @@ export function SpotProvider({ children }) {
         addPatrol,
         // Devices
         assignDeviceToGuard,
+        deleteDevice,
       }}
     >
       {children}

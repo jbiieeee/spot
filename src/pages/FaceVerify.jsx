@@ -32,7 +32,11 @@ function captureFrame(videoEl, size = 320) {
   const dim = Math.min(vw, vh);
   const sx = (vw - dim) / 2;
   const sy = (vh - dim) / 2;
+  ctx.save();
+  ctx.translate(size, 0);
+  ctx.scale(-1, 1);
   ctx.drawImage(videoEl, sx, sy, dim, dim, 0, 0, size, size);
+  ctx.restore();
   const brightness = getBrightnessFraction(ctx, size, size);
   return { dataUrl: canvas.toDataURL('image/jpeg', 0.85), brightness };
 }
@@ -466,7 +470,7 @@ export default function FaceVerify() {
               {/* Live video (hidden but captures stream) */}
               <video
                 ref={videoRef}
-                className="absolute inset-0 w-full h-full object-cover"
+                className="absolute inset-0 w-full h-full -scale-x-100 object-cover"
                 style={{ display: cameraActive && !capturedImage ? 'block' : 'none' }}
                 muted
                 playsInline

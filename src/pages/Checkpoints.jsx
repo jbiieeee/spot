@@ -27,10 +27,17 @@ export default function Checkpoints() {
       lat: parseFloat(form.lat) || 0,
       lng: parseFloat(form.lng) || 0
     };
-    await addItem('checkpoints', newItem);
+    const docId = await addItem('checkpoints', newItem);
+    // Build the full QR payload the Android app will scan
+    const qrPayload = JSON.stringify({
+      id: docId || qrCode,
+      siteId: form.siteId,
+      name: form.name,
+      qrCode
+    });
     setForm({ name: '', siteId: '', lat: '', lng: '' });
     setOpen(false);
-    setQrOpen(newItem);
+    setQrOpen({ ...newItem, id: docId || qrCode, qrPayload });
   };
 
   const siteMap = Object.fromEntries(sites.map((s) => [s.id, s.name]));
@@ -43,21 +50,25 @@ export default function Checkpoints() {
     >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {checkpoints.map((c) => (
-          <div key={c.id} className="card border-cyan-100 p-5">
-            <div className="mb-3 flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <h3 className="truncate font-semibold text-slate-950">{c.name}</h3>
-                <div className="mt-1 text-xs text-slate-500">Site: {siteMap[c.siteId] || 'Unknown site'}</div>
+            <div key={c.id} className="card border-cyan-100 p-5">
+              <div className="mb-3 flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h3 className="truncate font-semibold text-slate-950">{c.name}</h3>
+                  <div className="mt-1 text-xs text-slate-500">Site: {siteMap[c.siteId] || 'Unknown site'}</div>
+                  <div className="mt-0.5 text-[10px] font-mono text-slate-400">ID: {c.id}</div>
+                </div>
+                <span className="badge bg-cyan-50 font-mono text-cyan-800 ring-1 ring-inset ring-cyan-100 shrink-0">{c.qrCode}</span>
               </div>
-              <span className="badge bg-cyan-50 font-mono text-cyan-800 ring-1 ring-inset ring-cyan-100">{c.qrCode}</span>
-            </div>
-            <div className="mb-4 text-xs text-slate-500">
-              Lat: {c.lat?.toFixed?.(4) ?? '-'} / Lng: {c.lng?.toFixed?.(4) ?? '-'}
-            </div>
-            <div className="flex gap-2">
-              <button className="btn-ghost flex-1 justify-center text-xs" onClick={() => setQrOpen(c)}>Show QR</button>
-              <button className="btn-ghost text-xs text-rose-600" onClick={() => { if (confirm(`Delete ${c.name}?`)) removeItem('checkpoints', c.id); }}>Delete</button>
-            </div>
+              <div className="mb-4 text-xs text-slate-500">
+                Lat: {c.lat?.toFixed?.(4) ?? '-'} / Lng: {c.lng?.toFixed?.(4) ?? '-'}
+              </div>
+              <div className="flex gap-2">
+                <button className="btn-ghost flex-1 justify-center text-xs" onClick={() => {
+                  const payload = JSON.stringify({ id: c.id, siteId: c.siteId, name: c.name, qrCode: c.qrCode });
+                  setQrOpen({ ...c, qrPayload: payload });
+                }}>Show QR</button>
+                <button className="btn-ghost text-xs text-rose-600" onClick={() => { if (confirm(`Delete ${c.name}?`)) removeItem('checkpoints', c.id); }}>Delete</button>
+              </div>
           </div>
         ))}
         {checkpoints.length === 0 && (
@@ -108,15 +119,21 @@ export default function Checkpoints() {
         description="Use this code at the physical checkpoint location."
         footer={<button className="btn-primary" onClick={() => window.print()}>Print</button>}
       >
-        {qrOpen && (
-          <div className="text-center">
-            <div className="inline-block rounded-lg border border-slate-200 bg-white p-4">
-              <QRCodeSVG value={qrOpen.qrCode} size={220} />
+        {qrOpen && (() => {
+          const payload = qrOpen.qrPayload || JSON.stringify({ id: qrOpen.id, siteId: qrOpen.siteId, name: qrOpen.name, qrCode: qrOpen.qrCode });
+          return (
+            <div className="text-center">
+              <div className="inline-block rounded-lg border border-slate-200 bg-white p-4">
+                <QRCodeSVG value={payload} size={220} />
+              </div>
+              <div className="mt-4 font-mono text-sm text-slate-700">{qrOpen.qrCode}</div>
+              <div className="mt-1 text-[10px] font-mono text-slate-400 break-all px-2">
+                QR encodes: checkpoint ID + site ID + name for Android validation
+              </div>
+              <p className="mt-2 text-xs text-slate-500">Print and mount at <b>{qrOpen.name}</b>. Guards scan it from the Android app to log a patrol visit.</p>
             </div>
-            <div className="mt-4 font-mono text-sm text-slate-700">{qrOpen.qrCode}</div>
-            <p className="mt-2 text-xs text-slate-500">Print and mount this QR code at <b>{qrOpen.name}</b>. Guards scan it from the Android app to log a patrol visit.</p>
-          </div>
-        )}
+          );
+        })()}
       </Modal>
     </Layout>
   );

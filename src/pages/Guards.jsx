@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import Layout from '../components/Layout';
 import GuardAvatar from '../components/GuardAvatar';
 import { useSpot } from '../context/SpotContext';
+import { createIsolatedAuth } from '../lib/firebase';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import {
   Users, Search, Battery, ShieldCheck, Eye, Plus, Pencil, Trash2, X,
-  Check, AlertTriangle, Smartphone, Link, Unlink
+  Check, AlertTriangle, Smartphone, Link, Unlink, KeyRound
 } from 'lucide-react';
 
 // ─── Reusable Modal Shell ────────────────────────────────────────────────────
@@ -39,19 +41,57 @@ function Field({ label, children }) {
 }
 
 // ─── Guard Form Fields ────────────────────────────────────────────────────────
-function GuardFormFields({ form, onChange }) {
+function GuardFormFields({ form, onChange, sites = [], isAddMode = false }) {
   const handlePhotoUpload = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) return;
 
     const reader = new FileReader();
-    reader.onload = () => onChange('photo', reader.result);
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const maxSize = 512;
+        const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        onChange('photo', canvas.toDataURL('image/jpeg', 0.8));
+      };
+      image.src = reader.result;
+    };
     reader.readAsDataURL(file);
+  };
+
+  const handleSiteChange = (e) => {
+    const siteId = e.target.value;
+    const site = sites.find(s => s.id === siteId);
+    onChange('siteId', siteId);
+    onChange('siteName', site?.name || '');
+    onChange('client', site?.client || form.client || '');
   };
 
   return (
     <>
+      {/* Login credentials — only shown when adding a new guard */}
+      {isAddMode && (
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
+          <div className="flex items-center gap-2 text-xs font-bold text-blue-400 uppercase tracking-wider">
+            <KeyRound className="h-3.5 w-3.5" /> Android App Login Credentials
+          </div>
+          <p className="text-[11px] text-slate-400">These credentials will be used by the guard to log in to the Android app.</p>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Email *">
+              <input className="input-spot" type="email" value={form.email || ''} onChange={e => onChange('email', e.target.value)} placeholder="guard@spot.com" />
+            </Field>
+            <Field label="Password *">
+              <input className="input-spot" type="password" value={form.password || ''} onChange={e => onChange('password', e.target.value)} placeholder="min. 6 characters" />
+            </Field>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <Field label="Full Name *">
           <input className="input-spot" value={form.name} onChange={e => onChange('name', e.target.value)} placeholder="e.g. Juan dela Cruz" />
@@ -60,14 +100,25 @@ function GuardFormFields({ form, onChange }) {
           <input className="input-spot" value={form.phone} onChange={e => onChange('phone', e.target.value)} placeholder="+63 917 000 0000" />
         </Field>
       </div>
+
       <div className="grid grid-cols-2 gap-4">
         <Field label="Assigned Site">
-          <input className="input-spot" value={form.siteName} onChange={e => onChange('siteName', e.target.value)} placeholder="e.g. Eastwood Mall" />
+          {sites.length > 0 ? (
+            <select className="input-spot" value={form.siteId || ''} onChange={handleSiteChange}>
+              <option value="">— Select a site —</option>
+              {sites.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          ) : (
+            <input className="input-spot" value={form.siteName} onChange={e => onChange('siteName', e.target.value)} placeholder="e.g. Eastwood Mall" />
+          )}
         </Field>
         <Field label="Client">
           <input className="input-spot" value={form.client} onChange={e => onChange('client', e.target.value)} placeholder="e.g. ETON Properties" />
         </Field>
       </div>
+
       <div className="grid grid-cols-2 gap-4">
         <Field label="Shift Schedule">
           <select className="input-spot" value={form.shift} onChange={e => onChange('shift', e.target.value)}>
@@ -84,6 +135,7 @@ function GuardFormFields({ form, onChange }) {
           </select>
         </Field>
       </div>
+
       <Field label="Profile Photo (optional)">
         <div className="flex items-center gap-3">
           <GuardAvatar photo={form.photo} name={form.name} />
@@ -103,7 +155,7 @@ function GuardFormFields({ form, onChange }) {
   );
 }
 
-const EMPTY_GUARD = { name: '', phone: '', siteName: '', client: '', shift: 'Day Shift (06:00 - 18:00)', status: 'Idle', photo: '' };
+const EMPTY_GUARD = { name: '', email: '', password: '', phone: '', siteId: '', siteName: '', client: '', shift: 'Day Shift (06:00 - 18:00)', status: 'Idle', photo: '' };
 
 // ─── Delete Confirmation Modal ────────────────────────────────────────────────
 function DeleteConfirm({ label, onCancel, onConfirm }) {
@@ -230,7 +282,7 @@ function AssignDeviceModal({ guard, devices, onClose, onAssign }) {
 
 // ─── Main Guards Page ─────────────────────────────────────────────────────────
 export default function Guards() {
-  const { guards, devices, openGuardDrawer, addGuard, updateGuard, deleteGuard, assignDeviceToGuard } = useSpot();
+  const { guards, sites, devices, openGuardDrawer, addGuard, updateGuard, deleteGuard, assignDeviceToGuard, addToast } = useSpot();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -239,10 +291,11 @@ export default function Guards() {
   const [showAdd, setShowAdd] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deviceTarget, setDeviceTarget] = useState(null); // guard to assign device
+  const [deviceTarget, setDeviceTarget] = useState(null);
   const [addForm, setAddForm] = useState(EMPTY_GUARD);
   const [editForm, setEditForm] = useState(EMPTY_GUARD);
   const [saving, setSaving] = useState(false);
+  const [authError, setAuthError] = useState('');
 
   const filteredGuards = guards.filter((guard) => {
     const matchesSearch =
@@ -255,17 +308,48 @@ export default function Guards() {
 
   const handleAdd = async () => {
     if (!addForm.name.trim()) return;
+    setAuthError('');
     setSaving(true);
-    await addGuard(addForm);
+
+    // If email + password provided, create Firebase Auth account for the guard
+    if (addForm.email?.trim() && addForm.password?.trim()) {
+      const { auth: isolatedAuth, dispose } = createIsolatedAuth();
+      try {
+        const cred = await createUserWithEmailAndPassword(
+          isolatedAuth,
+          addForm.email.trim(),
+          addForm.password.trim()
+        );
+        await updateProfile(cred.user, { displayName: addForm.name.trim() });
+        // Use the real Firebase UID as the guard's Firestore document ID
+        await addGuard({ ...addForm, id: cred.user.uid, email: addForm.email.trim() });
+        addToast('Guard Registered', `${addForm.name} — Firebase Auth account created. Guard can now log in to the Android app.`, 'success');
+      } catch (err) {
+        setAuthError(err.message || 'Failed to create login account.');
+        setSaving(false);
+        dispose();
+        return;
+      } finally {
+        dispose();
+      }
+    } else {
+      // No credentials — add to Firestore only (guard cannot log in to Android app yet)
+      await addGuard(addForm);
+    }
+
     setSaving(false);
     setAddForm(EMPTY_GUARD);
+    setAuthError('');
     setShowAdd(false);
   };
 
   const openEdit = (guard) => {
     setEditForm({
       name: guard.name || '',
+      email: guard.email || '',
+      password: '',
       phone: guard.phone || '',
+      siteId: guard.siteId || '',
       siteName: guard.siteName || '',
       client: guard.client || '',
       shift: guard.shift || 'Day Shift (06:00 - 18:00)',
@@ -500,11 +584,11 @@ export default function Guards() {
       {showAdd && (
         <Modal
           title="Register New Guard"
-          subtitle="Add a new guard to the personnel roster"
-          onClose={() => { setShowAdd(false); setAddForm(EMPTY_GUARD); }}
+          subtitle="Add a new guard to the personnel roster & create app credentials"
+          onClose={() => { setShowAdd(false); setAddForm(EMPTY_GUARD); setAuthError(''); }}
           footer={
             <>
-              <button onClick={() => { setShowAdd(false); setAddForm(EMPTY_GUARD); }} className="btn-secondary text-xs">Cancel</button>
+              <button onClick={() => { setShowAdd(false); setAddForm(EMPTY_GUARD); setAuthError(''); }} className="btn-secondary text-xs">Cancel</button>
               <button onClick={handleAdd} disabled={saving || !addForm.name.trim()} className="btn-primary text-xs flex items-center gap-2">
                 {saving ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" /> : <Check className="h-3.5 w-3.5" />}
                 Save Guard
@@ -512,7 +596,13 @@ export default function Guards() {
             </>
           }
         >
-          <GuardFormFields form={addForm} onChange={(k, v) => setAddForm(f => ({ ...f, [k]: v }))} />
+          {authError && (
+            <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-400">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>{authError}</span>
+            </div>
+          )}
+          <GuardFormFields form={addForm} onChange={(k, v) => setAddForm(f => ({ ...f, [k]: v }))} sites={sites} isAddMode={true} />
         </Modal>
       )}
 
@@ -532,7 +622,7 @@ export default function Guards() {
             </>
           }
         >
-          <GuardFormFields form={editForm} onChange={(k, v) => setEditForm(f => ({ ...f, [k]: v }))} />
+          <GuardFormFields form={editForm} onChange={(k, v) => setEditForm(f => ({ ...f, [k]: v }))} sites={sites} isAddMode={false} />
         </Modal>
       )}
 

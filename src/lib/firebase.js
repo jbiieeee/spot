@@ -7,7 +7,6 @@ import {
   persistentLocalCache,
   persistentMultipleTabManager
 } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
 
 export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FB_API_KEY || "AIzaSyD0Vx5ZKt7DzQI8F5INfyJddWE4d5OkiRQ",
@@ -32,8 +31,6 @@ export const functions = getFunctions(app);
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
 });
-
-export const storage = getStorage(app);
 
 export const analyticsPromise = isAnalyticsSupported()
   .then((supported) => (supported && firebaseConfig.measurementId ? getAnalytics(app) : null))

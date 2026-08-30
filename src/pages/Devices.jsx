@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import Layout from '../components/Layout';
 import GuardAvatar from '../components/GuardAvatar';
 import { useSpot } from '../context/SpotContext';
-import { Smartphone, RefreshCw, Link, Unlink, Search, Wifi } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { Smartphone, RefreshCw, Link, Unlink, Search, Wifi, Trash2 } from 'lucide-react';
 
 function formatDate(date) {
   if (!date) return 'N/A';
@@ -15,7 +16,9 @@ function formatDate(date) {
 }
 
 export default function Devices() {
-  const { devices, guards, assignDeviceToGuard, addToast } = useSpot();
+  const { devices, guards, deleteDevice, addToast } = useSpot();
+  const { profile } = useAuth();
+  const canManageDevices = ['admin', 'supervisor'].includes(String(profile?.role || '').toLowerCase());
   const [search, setSearch] = useState('');
 
   // Build a map of deviceId -> guard name for quick lookup
@@ -102,12 +105,13 @@ export default function Devices() {
                   <th className="px-6 py-4">Last Active</th>
                   <th className="px-6 py-4">Assigned Guard</th>
                   <th className="px-6 py-4">Status</th>
+                  {canManageDevices && <th className="px-6 py-4">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-16 text-center">
+                    <td colSpan={canManageDevices ? 7 : 6} className="py-16 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <div className="p-3 rounded-2xl bg-slate-800/60 border border-slate-700">
                           <Smartphone className="h-7 w-7 text-slate-500" />
@@ -165,6 +169,25 @@ export default function Devices() {
                             <span className="text-xs text-slate-500 italic">Unassigned</span>
                           )}
                         </td>
+
+                        {canManageDevices && (
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={async () => {
+                                if (!window.confirm(`Delete registered device ${d.deviceId}? Any guard binding will be removed.`)) return;
+                                try {
+                                  await deleteDevice(d);
+                                } catch (e) {
+                                  addToast('Delete Failed', e.message || 'Could not delete the device.', 'danger');
+                                }
+                              }}
+                              title="Delete registered device"
+                              className="rounded-lg border border-slate-700 bg-slate-800 p-1.5 text-rose-400 transition hover:border-rose-500 hover:text-white"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        )}
 
                         {/* Status badge */}
                         <td className="px-6 py-4">

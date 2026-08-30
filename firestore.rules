@@ -27,8 +27,8 @@ service cloud.firestore {
       allow delete: if isSupervisor();
     }
 
-    // Devices — any authenticated user can register their phone on launch
-    // Supervisors can read all devices
+    // Devices — any authenticated user can register/update their phone;
+    // managers can delete stale registrations.
     match /devices/{deviceId} {
       allow read: if isAuthed();
       allow create, update: if isAuthed();
@@ -42,8 +42,9 @@ service cloud.firestore {
     match /routes/{id}      { allow read: if isAuthed(); allow write: if isSupervisor(); }
     match /schedules/{id}   { allow read: if isAuthed(); allow write: if isSupervisor(); }
     match /guard_schedules_template/{id} { allow read: if isAuthed(); allow write: if isSupervisor(); }
-    match /guardLocations/{id}  { allow read: if isSupervisor(); allow write: if isAuthed(); }
+    match /guardLocations/{id}  { allow read: if isSupervisor() || isSelf(id); allow write: if isAuthed(); }
     match /locationHistory/{id} { allow read: if isSupervisor(); allow write: if isAuthed(); }
+    match /telematics/{id}      { allow read: if isSupervisor() || (isAuthed() && resource.data.guardId == request.auth.uid); allow write: if isAuthed(); }
     match /approvalRequests/{id} { allow read, write: if isSupervisor(); }
     match /auditLogs/{id} {
       allow read: if isSupervisor();
