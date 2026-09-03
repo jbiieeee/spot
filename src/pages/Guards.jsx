@@ -154,7 +154,7 @@ function DeleteConfirm({ label, onConfirm, onCancel }) {
 }
 
 // ─── Assign Device Modal ──────────────────────────────────────────────────────
-function AssignDeviceModal({ guard, devices, onClose, onAssign }) {
+function AssignDeviceModal({ guard, guards = [], devices = [], onClose, onAssign }) {
   const [selected, setSelected] = useState(guard.deviceId || '');
   const [saving, setSaving] = useState(false);
 
@@ -197,11 +197,14 @@ function AssignDeviceModal({ guard, devices, onClose, onAssign }) {
           onChange={e => setSelected(e.target.value)}
         >
           <option value="">— None (unassign) —</option>
-          {devices.map(d => (
-            <option key={d.id} value={d.deviceId}>
-              {d.deviceModel} · {d.deviceId} · {d.osVersion}
-            </option>
-          ))}
+          {devices.map(d => {
+            const holder = guards.find(g => g.deviceId === d.deviceId && g.id !== guard.id);
+            return (
+              <option key={d.id} value={d.deviceId}>
+                {d.deviceModel} ({d.deviceId}) {holder ? `[Held by ${holder.name}]` : '[Available]'}
+              </option>
+            );
+          })}
         </select>
       </Field>
 
@@ -214,31 +217,48 @@ function AssignDeviceModal({ guard, devices, onClose, onAssign }) {
 
       {devices.length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Registered Devices</div>
-          {devices.map(d => (
-            <button
-              key={d.id}
-              onClick={() => setSelected(d.deviceId === selected ? '' : d.deviceId)}
-              className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition ${
-                selected === d.deviceId
-                  ? 'border-blue-500/50 bg-blue-500/10'
-                  : 'border-slate-700 bg-slate-900/40 hover:border-slate-500'
-              }`}
-            >
-              <Smartphone className={`h-5 w-5 shrink-0 ${selected === d.deviceId ? 'text-blue-400' : 'text-slate-500'}`} />
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-bold text-white">{d.deviceModel}</div>
-                <div className="text-[10px] font-mono text-slate-400 truncate">{d.deviceId}</div>
-                <div className="text-[10px] text-slate-500">{d.osVersion}</div>
-              </div>
-              <div className="text-[10px] text-slate-500 shrink-0">
-                {d.lastActive ? d.lastActive.toLocaleDateString() : 'N/A'}
-              </div>
-              {selected === d.deviceId && (
-                <Check className="h-4 w-4 text-blue-400 shrink-0" />
-              )}
-            </button>
-          ))}
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Available Hardware Phones</div>
+          {devices.map(d => {
+            const isCurrent = d.deviceId === guard.deviceId;
+            const otherHolder = guards.find(g => g.deviceId === d.deviceId && g.id !== guard.id);
+
+            return (
+              <button
+                key={d.id}
+                onClick={() => setSelected(d.deviceId === selected ? '' : d.deviceId)}
+                className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition ${
+                  selected === d.deviceId
+                    ? 'border-blue-500/50 bg-blue-500/10'
+                    : 'border-slate-700 bg-slate-900/40 hover:border-slate-500'
+                }`}
+              >
+                <Smartphone className={`h-5 w-5 shrink-0 ${selected === d.deviceId ? 'text-blue-400' : 'text-slate-500'}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                    <span>{d.deviceModel}</span>
+                    {isCurrent && (
+                      <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.2 rounded border border-blue-500/30">
+                        Current
+                      </span>
+                    )}
+                    {otherHolder && (
+                      <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.2 rounded border border-amber-500/30">
+                        With {otherHolder.name}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-400 truncate">{d.deviceId}</div>
+                  <div className="text-[10px] text-slate-500">{d.osVersion}</div>
+                </div>
+                <div className="text-[10px] text-slate-500 shrink-0">
+                  {d.lastActive ? d.lastActive.toLocaleDateString() : 'Active'}
+                </div>
+                {selected === d.deviceId && (
+                  <Check className="h-4 w-4 text-blue-400 shrink-0" />
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </Modal>
@@ -830,6 +850,7 @@ export default function Guards() {
       {deviceTarget && (
         <AssignDeviceModal
           guard={deviceTarget}
+          guards={guards}
           devices={devices}
           onClose={() => setDeviceTarget(null)}
           onAssign={assignDeviceToGuard}

@@ -241,21 +241,33 @@ export default function Devices() {
                           )}
                         </td>
 
-                        {/* Actions: BIND / UNBIND */}
+                        {/* Actions: BIND / REASSIGN / UNBIND */}
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             {boundGuard ? (
-                              <button
-                                onClick={() => {
-                                  if (confirm(`Unbind device "${d.deviceId}" from guard "${boundGuard.name}"?`)) {
-                                    unassignDevice(d.deviceId);
-                                  }
-                                }}
-                                className="btn-secondary py-1 px-2.5 text-xs text-amber-400 hover:text-white flex items-center gap-1"
-                                title="Unbind phone from this guard"
-                              >
-                                <Unlink className="h-3 w-3" /> Unbind
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setBindModalDevice(d);
+                                    setSelectedGuardForBind(boundGuard.id);
+                                  }}
+                                  className="btn-secondary py-1 px-2.5 text-xs text-blue-400 hover:text-white flex items-center gap-1"
+                                  title="Reassign phone to a different guard"
+                                >
+                                  <ArrowRightLeft className="h-3 w-3" /> Reassign
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (confirm(`Unbind device "${d.deviceId}" from guard "${boundGuard.name}"?`)) {
+                                      unassignDevice(d.deviceId);
+                                    }
+                                  }}
+                                  className="btn-secondary py-1 px-2.5 text-xs text-amber-400 hover:text-white flex items-center gap-1"
+                                  title="Unbind phone from this guard"
+                                >
+                                  <Unlink className="h-3 w-3" /> Unbind
+                                </button>
+                              </>
                             ) : (
                               <button
                                 onClick={() => {
@@ -296,7 +308,7 @@ export default function Devices() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          BIND DEVICE TO GUARD MODAL
+          BIND / REASSIGN DEVICE TO GUARD MODAL
           ───────────────────────────────────────────────────────────── */}
       {bindModalDevice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
@@ -304,7 +316,7 @@ export default function Devices() {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
                 <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">Device Hardware Binding</span>
-                <h3 className="text-base font-bold text-white">Bind Phone to Guard</h3>
+                <h3 className="text-base font-bold text-white">Bind / Reassign Phone</h3>
               </div>
               <button
                 onClick={() => setBindModalDevice(null)}
@@ -315,9 +327,16 @@ export default function Devices() {
             </div>
 
             <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1 text-xs">
-              <div className="text-slate-400">Selected Device:</div>
-              <div className="text-sm font-bold text-white">{bindModalDevice.deviceModel}</div>
-              <div className="font-mono text-[11px] text-blue-400">{bindModalDevice.deviceId}</div>
+              <div className="text-slate-400">Target Phone:</div>
+              <div className="text-sm font-bold text-white flex items-center justify-between">
+                <span>{bindModalDevice.deviceModel}</span>
+                <span className="font-mono text-[11px] text-blue-400">{bindModalDevice.deviceId}</span>
+              </div>
+              {deviceToGuard[bindModalDevice.deviceId] && (
+                <div className="text-[11px] text-amber-400 mt-1">
+                  Currently bound to: <strong>{deviceToGuard[bindModalDevice.deviceId].name}</strong>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -330,10 +349,20 @@ export default function Devices() {
                 <option value="">Select a guard from roster...</option>
                 {guards.map((g) => (
                   <option key={g.id} value={g.id}>
-                    {g.name} ({g.siteName}) {g.deviceId ? `[Already bound to: ${g.deviceId}]` : '[No Device]'}
+                    {g.name} ({g.siteName}) {g.deviceId ? `[Bound to ${g.deviceId}]` : '[Free / No Device]'}
                   </option>
                 ))}
               </select>
+
+              {/* Guard swap notification */}
+              {selectedGuardForBind && guards.find(g => g.id === selectedGuardForBind)?.deviceId && (
+                <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-xs text-blue-300">
+                  ℹ️ Guard <strong>{guards.find(g => g.id === selectedGuardForBind)?.name}</strong> currently has phone{' '}
+                  <span className="font-mono font-bold text-white">{guards.find(g => g.id === selectedGuardForBind)?.deviceId}</span>.
+                  Confirming will automatically swap and assign this new phone.
+                </div>
+              )}
+
               <p className="text-[11px] text-slate-400">
                 When bound, the guard's mobile GPS logs and telemetry from this phone will stream in real-time.
               </p>
