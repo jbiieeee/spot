@@ -4,6 +4,16 @@ import { subscribeCollection, updateItem, addItem, removeItem, setItem } from '.
 
 const SpotContext = createContext();
 
+export function normalizeBattery(val) {
+  if (val === undefined || val === null || val === '') return null;
+  const num = typeof val === 'number' ? val : parseFloat(val);
+  if (isNaN(num)) return null;
+  if (num > 0 && num <= 1.0) {
+    return Math.round(num * 100);
+  }
+  return Math.min(100, Math.max(0, Math.round(num)));
+}
+
 function playChime() {
   try {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -42,6 +52,7 @@ export function SpotProvider({ children }) {
   const [attendance, setAttendance] = useState([]);
   const [checkpointLogs, setCheckpointLogs] = useState([]);
   const [guardLocations, setGuardLocations] = useState({});
+  const [checkpoints, setCheckpoints] = useState([]);
 
   // Database Connection Indicator
   const [dbConnected, setDbConnected] = useState(Boolean(hasFirebaseConfig && db));
@@ -51,21 +62,29 @@ export function SpotProvider({ children }) {
   const [isGuardDrawerOpen, setIsGuardDrawerOpen] = useState(false);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
 
-  // Track previous guards state to detect device updates
+  // Track previous guards & live locations to detect device / battery telemetry updates
   const prevGuardsRef = useRef({});
+  const guardLocationsRef = useRef({});
 
   // Toasts Notification Stack
   const [toasts, setToasts] = useState([]);
 
-  const addToast = (title, message, type = 'info') => {
+  const addToast = (title, message, type = 'info', duration = 3000) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const newToast = {
-      id: `toast-${Date.now()}`,
+      id,
       title,
       message,
       type,
+      duration,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     setToasts((prev) => [newToast, ...prev.slice(0, 4)]);
+
+    // Automatically remove toast after 3 seconds
+    setTimeout(() => {
+      removeToast(id);
+    }, duration);
   };
 
   const removeToast = (id) => {
@@ -164,34 +183,42 @@ export function SpotProvider({ children }) {
     const unsubUsers = subscribeCollection('users', (fsUsers) => {
       const formatted = (fsUsers || [])
         .filter((u) => u.role === 'guard' || u.role === 'Guard' || !u.role)
-        .map((u) => ({
-          id: u.id,
-          name: u.name || u.displayName || u.email || 'Guard Personnel',
-          photo: u.photo || u.photoUrl || '',
-          client: u.client || 'Client',
-          siteId: u.siteId || 'SITE-01',
-          siteName: u.siteName || 'Assigned Site',
-          shift: u.shift || 'Day Shift',
-          status: u.status || 'Idle',
-          battery: u.battery !== undefined ? u.battery : 100,
-          gpsAccuracy: u.gpsAccuracy || '1.5m',
-          gpsLat: u.gpsLat || u.lat || 14.5547,
-          gpsLng: u.gpsLng || u.lng || 121.0244,
-          faceVerified: Boolean(u.faceVerified),
-          faceVerifiedAt: u.faceVerifiedAt || 'Pending',
-          faceEnrollmentStatus: u.faceEnrollmentStatus || (u.faceVerified ? 'enrolled' : 'pending'),
-          faceProfileId: u.faceProfileId || null,
-          facePhotoUrl: u.facePhotoUrl || u.facePhoto || '',
-          currentPatrolName: u.currentPatrolName || '',
-          progressPct: u.progressPct || 0,
-          completedCheckpoints: u.completedCheckpoints || 0,
-          totalCheckpoints: u.totalCheckpoints || 0,
-          etaMinutes: u.etaMinutes || 0,
-          phone: u.phone || 'N/A',
-          deviceId: u.deviceId || null,
-          performanceRating: u.performanceRating || 100,
-          attendanceRate: u.attendanceRate || 100
-        }));
+        .map((u) => {
+          const loc = guardLocationsRef.current[u.id] || (u.deviceId ? guardLocationsRef.current[u.deviceId] : null);
+          const rawBattery = normalizeBattery(
+            loc?.battery ?? u.battery ?? u.batteryLevel ?? u.batteryPct ?? u.deviceBattery
+          );
+
+          return {
+            id: u.id,
+            name: u.name || u.displayName || u.email || 'Guard Personnel',
+            photo: u.photo || u.photoUrl || '',
+            client: u.client || 'Client',
+            siteId: u.siteId || 'SITE-01',
+            siteName: u.siteName || 'Assigned Site',
+            shift: u.shift || 'Day Shift',
+            status: u.status || 'Idle',
+            battery: rawBattery !== null ? rawBattery : (u.battery !== undefined ? normalizeBattery(u.battery) : 100),
+            isCharging: Boolean(loc?.isCharging || u.isCharging),
+            gpsAccuracy: loc?.accuracy != null ? `${loc.accuracy.toFixed(1)}m` : (u.gpsAccuracy || '1.5m'),
+            gpsLat: loc?.lat ?? (u.gpsLat || u.lat || 14.5547),
+            gpsLng: loc?.lng ?? (u.gpsLng || u.lng || 121.0244),
+            faceVerified: Boolean(u.faceVerified),
+            faceVerifiedAt: u.faceVerifiedAt || 'Pending',
+            faceEnrollmentStatus: u.faceEnrollmentStatus || (u.faceVerified ? 'enrolled' : 'pending'),
+            faceProfileId: u.faceProfileId || null,
+            facePhotoUrl: u.facePhotoUrl || u.facePhoto || '',
+            currentPatrolName: u.currentPatrolName || '',
+            progressPct: u.progressPct || 0,
+            completedCheckpoints: u.completedCheckpoints || 0,
+            totalCheckpoints: u.totalCheckpoints || 0,
+            etaMinutes: u.etaMinutes || 0,
+            phone: u.phone || 'N/A',
+            deviceId: u.deviceId || null,
+            performanceRating: u.performanceRating || 100,
+            attendanceRate: u.attendanceRate || 100
+          };
+        });
 
       // Check if we already had guards loaded (to avoid triggering on first load)
       const hasPrev = Object.keys(prevGuardsRef.current).length > 0;
@@ -317,8 +344,9 @@ export function SpotProvider({ children }) {
         id: d.id,
         deviceId: d.deviceId || d.id,
         deviceModel: d.deviceModel || 'Unknown Device',
-        osVersion: d.osVersion || 'Unknown OS',
-        lastActive: d.lastActive?.toDate ? d.lastActive.toDate() : null,
+        osVersion: d.osVersion || 'Android OS',
+        battery: normalizeBattery(d.battery ?? d.batteryLevel ?? d.batteryPct ?? d.level),
+        lastActive: d.lastActive?.toDate ? d.lastActive.toDate() : (d.timestamp?.toDate ? d.timestamp.toDate() : null),
       }));
       setDevices(formatted);
     });
@@ -355,10 +383,14 @@ export function SpotProvider({ children }) {
       setCheckpointLogs(formatted);
     });
 
-    // 10. Guard live locations (from Android app GPS service)
+    // 10. Guard live locations (from Android app GPS & telemetry service)
     const unsubGuardLocations = subscribeCollection('guardLocations', (fsDocs) => {
       const locationMap = {};
       (fsDocs || []).forEach((doc) => {
+        const liveBatt = normalizeBattery(
+          doc.battery ?? doc.batteryLevel ?? doc.batteryPct ?? doc.batteryPercent ?? doc.level ?? doc.deviceBattery
+        );
+
         locationMap[doc.id] = {
           id: doc.id,
           lat: doc.lat ?? doc.gpsLat ?? null,
@@ -367,14 +399,53 @@ export function SpotProvider({ children }) {
           speed: doc.speed ?? null,
           bearing: doc.bearing ?? null,
           altitude: doc.altitude ?? null,
-          battery: doc.battery ?? null,
+          battery: liveBatt,
+          isCharging: Boolean(doc.isCharging || doc.charging),
           activityType: doc.activityType || 'unknown',
           networkType: doc.networkType || 'unknown',
           patrolSessionId: doc.patrolSessionId || null,
-          timestamp: doc.timestamp?.toDate ? doc.timestamp.toDate() : null,
+          timestamp: doc.timestamp?.toDate ? doc.timestamp.toDate() : (doc.updatedAt?.toDate ? doc.updatedAt.toDate() : null),
         };
       });
       setGuardLocations(locationMap);
+      guardLocationsRef.current = locationMap;
+
+      // Realtime live battery and GPS synchronization directly into guards state
+      setGuards((prevGuards) =>
+        prevGuards.map((g) => {
+          const loc = locationMap[g.id] || (g.deviceId ? locationMap[g.deviceId] : null);
+          if (loc) {
+            return {
+              ...g,
+              gpsLat: loc.lat ?? g.gpsLat,
+              gpsLng: loc.lng ?? g.gpsLng,
+              gpsAccuracy: loc.accuracy != null ? `${loc.accuracy.toFixed(1)}m` : g.gpsAccuracy,
+              battery: loc.battery !== null ? loc.battery : g.battery,
+              isCharging: loc.isCharging ?? g.isCharging,
+              speed: loc.speed ?? g.speed,
+              lastSeen: loc.timestamp
+            };
+          }
+          return g;
+        })
+      );
+    });
+
+    // 11. Checkpoints
+    const unsubCheckpoints = subscribeCollection('checkpoints', (fsCheckpoints) => {
+      const formatted = (fsCheckpoints || []).map((doc) => ({
+        id: doc.id,
+        name: doc.name || doc.locationName || 'Checkpoint Post',
+        siteId: doc.siteId || '',
+        siteName: doc.siteName || '',
+        qrCode: doc.qrCode || `SPOT-CP-${doc.id.slice(-6).toUpperCase()}`,
+        lat: doc.lat ?? null,
+        lng: doc.lng ?? null,
+        zone: doc.zone || 'General Zone',
+        description: doc.description || '',
+        createdAt: doc.createdAt?.toDate ? doc.createdAt.toDate().toLocaleDateString() : 'Active',
+      }));
+      setCheckpoints(formatted);
     });
 
     setDbConnected(true);
@@ -392,6 +463,7 @@ export function SpotProvider({ children }) {
       unsubAttendance();
       unsubCheckpointLogs();
       unsubGuardLocations();
+      unsubCheckpoints();
     };
   }, []);
 
@@ -453,6 +525,42 @@ export function SpotProvider({ children }) {
       }
     }
     addToast('Guard Updated', `Guard record has been updated.`, 'info');
+  };
+
+  const updateGuardPassword = async (guardId, newPassword) => {
+    const targetGuard = guards.find((g) => g.id === guardId);
+    if (!targetGuard) throw new Error('Guard record not found.');
+
+    const patch = {
+      tempPassword: newPassword,
+      passwordUpdatedAt: new Date().toISOString(),
+      requiresPasswordChange: false
+    };
+
+    setGuards((prev) =>
+      prev.map((g) => (g.id === guardId ? { ...g, ...patch } : g))
+    );
+
+    if (hasFirebaseConfig && db) {
+      try {
+        await updateItem('users', guardId, patch);
+        await addItem('adminLogs', {
+          action: 'GUARD_PASSWORD_RESET',
+          guardId,
+          guardName: targetGuard.name,
+          adminEmail: auth?.currentUser?.email || 'admin@spot.com',
+          timestamp: new Date().toISOString()
+        });
+      } catch (e) {
+        console.warn('Firestore update guard password:', e);
+      }
+    }
+
+    addToast(
+      'Password Updated',
+      `Credentials for ${targetGuard.name} have been updated successfully.`,
+      'success'
+    );
   };
 
   const enrollGuardFace = async (guard, capture) => {
@@ -623,6 +731,134 @@ export function SpotProvider({ children }) {
   };
 
   // -------------------------------------------------------------
+  // CRUD — Checkpoints & QR Patrol Posts
+  // -------------------------------------------------------------
+  const addCheckpoint = async (newCp) => {
+    const site = sites.find((s) => s.id === newCp.siteId);
+    const cpCode = newCp.qrCode || `SPOT-CP-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const docData = {
+      name: newCp.name,
+      siteId: newCp.siteId,
+      siteName: site?.name || newCp.siteName || 'Assigned Facility',
+      qrCode: cpCode,
+      zone: newCp.zone || 'General Zone',
+      description: newCp.description || '',
+      lat: parseFloat(newCp.lat) || (site?.lat ? site.lat + (Math.random() - 0.5) * 0.002 : null),
+      lng: parseFloat(newCp.lng) || (site?.lng ? site.lng + (Math.random() - 0.5) * 0.002 : null),
+    };
+
+    let docId = `CP-${Date.now().toString().slice(-6)}`;
+    if (hasFirebaseConfig && db) {
+      try {
+        docId = await addItem('checkpoints', docData);
+      } catch (e) {
+        console.warn('Firestore add checkpoint:', e);
+      }
+    }
+
+    const created = { id: docId, ...docData };
+    setCheckpoints((prev) => [created, ...prev]);
+
+    // Automatically synchronize site's checkpoint count
+    if (newCp.siteId) {
+      const updatedCount = checkpoints.filter((c) => c.siteId === newCp.siteId).length + 1;
+      updateSite(newCp.siteId, { checkpointsCount: updatedCount });
+    }
+
+    addToast('QR Checkpoint Created', `${created.name} (${created.qrCode}) generated.`, 'success');
+    return created;
+  };
+
+  const updateCheckpoint = async (id, patch) => {
+    setCheckpoints((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+    if (hasFirebaseConfig && db) {
+      try {
+        await updateItem('checkpoints', id, patch);
+      } catch (e) {
+        console.warn('Firestore update checkpoint:', e);
+      }
+    }
+    addToast('Checkpoint Updated', 'Checkpoint details saved.', 'info');
+  };
+
+  const deleteCheckpoint = async (id, siteId) => {
+    const target = checkpoints.find((c) => c.id === id);
+    setCheckpoints((prev) => prev.filter((c) => c.id !== id));
+    if (hasFirebaseConfig && db) {
+      try {
+        await removeItem('checkpoints', id);
+      } catch (e) {
+        console.warn('Firestore delete checkpoint:', e);
+      }
+    }
+
+    const effectiveSiteId = siteId || target?.siteId;
+    if (effectiveSiteId) {
+      const updatedCount = Math.max(0, checkpoints.filter((c) => c.siteId === effectiveSiteId && c.id !== id).length);
+      updateSite(effectiveSiteId, { checkpointsCount: updatedCount });
+    }
+
+    addToast('Checkpoint Deleted', `${target?.name || 'Checkpoint'} removed.`, 'danger');
+  };
+
+  const batchGenerateSiteCheckpoints = async (site, targetCount = 5) => {
+    if (!site?.id) return;
+    const defaultZoneNames = [
+      'Main Gate & Guardhouse',
+      'Lobby & Reception Scan Point',
+      'East Perimeter & Loading Bay',
+      'Server Room & Vault Entry',
+      'Rooftop Access & Emergency Exit',
+      'South Fire Exit Stairwell',
+      'Basement Parking Area B1',
+      'Utility & Power Generator Room',
+      'Executive Floor Hallway',
+      'West Boundary Fence Post'
+    ];
+
+    const existingForSite = checkpoints.filter((c) => c.siteId === site.id);
+    const needed = Math.max(0, targetCount - existingForSite.length);
+
+    if (needed === 0) {
+      addToast('Checkpoints Ready', `${site.name} already has ${existingForSite.length} QR checkpoints.`, 'info');
+      return existingForSite;
+    }
+
+    const createdList = [];
+    for (let i = 0; i < needed; i++) {
+      const index = existingForSite.length + i;
+      const zoneName = defaultZoneNames[index % defaultZoneNames.length] || `Patrol Post #${index + 1}`;
+      const cpCode = `SPOT-CP-${site.id.slice(-3).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+      
+      const docData = {
+        name: `${zoneName}`,
+        siteId: site.id,
+        siteName: site.name,
+        qrCode: cpCode,
+        zone: `Zone ${String.fromCharCode(65 + (index % 6))}`,
+        description: `Designated scan checkpoint for ${site.name}`,
+        lat: site.lat ? site.lat + (Math.random() - 0.5) * 0.0015 : null,
+        lng: site.lng ? site.lng + (Math.random() - 0.5) * 0.0015 : null,
+      };
+
+      let docId = `CP-${Date.now().toString().slice(-4)}${i}`;
+      if (hasFirebaseConfig && db) {
+        try {
+          docId = await addItem('checkpoints', docData);
+        } catch (e) {
+          console.warn('Batch add CP err:', e);
+        }
+      }
+      createdList.push({ id: docId, ...docData });
+    }
+
+    setCheckpoints((prev) => [...createdList, ...prev]);
+    updateSite(site.id, { checkpointsCount: existingForSite.length + createdList.length });
+    addToast('Batch QR Generated', `Generated ${createdList.length} new QR Checkpoints for ${site.name}.`, 'success');
+    return [...existingForSite, ...createdList];
+  };
+
+  // -------------------------------------------------------------
   // CRUD — Clients
   // -------------------------------------------------------------
   const addClient = async (newClient) => {
@@ -737,35 +973,61 @@ export function SpotProvider({ children }) {
   };
 
   // -------------------------------------------------------------
-  // Assign Device to Guard
+  // Assign & Unassign Device to Guard
   // -------------------------------------------------------------
   const assignDeviceToGuard = async (guardId, deviceId) => {
-    const guard = guards.find((g) => g.id === guardId);
-    if (!guard) return;
+    const targetGuard = guards.find((g) => g.id === guardId);
+    if (!targetGuard) return;
 
-    // Optimistic update
+    // Any other guard holding this deviceId gets unassigned
+    const otherGuards = guards.filter((g) => g.deviceId === deviceId && g.id !== guardId);
+
     setGuards((prev) =>
-      prev.map((g) => (g.id === guardId ? { ...g, deviceId: deviceId || null } : g))
+      prev.map((g) => {
+        if (g.id === guardId) return { ...g, deviceId: deviceId || null };
+        if (deviceId && g.deviceId === deviceId) return { ...g, deviceId: null };
+        return g;
+      })
     );
 
     if (hasFirebaseConfig && db) {
       try {
         await updateItem('users', guardId, { deviceId: deviceId || null });
+        for (const og of otherGuards) {
+          await updateItem('users', og.id, { deviceId: null });
+        }
       } catch (e) {
-        console.warn('Firestore assign device:', e);
+        console.warn('Firestore assign device error:', e);
       }
     }
 
     if (deviceId) {
-      addToast(
-        'Device Assigned',
-        `Device bound to ${guard.name}. Chime alert active.`,
-        'success'
-      );
+      addToast('Device Bound', `Device ${deviceId} bound to ${targetGuard.name}.`, 'success');
       playChime();
     } else {
-      addToast('Device Unlinked', `${guard.name}'s device binding has been removed.`, 'info');
+      addToast('Device Unbound', `${targetGuard.name}'s device binding was cleared.`, 'info');
     }
+  };
+
+  const unassignDevice = async (deviceId) => {
+    if (!deviceId) return;
+    const affected = guards.filter((g) => g.deviceId === deviceId);
+
+    setGuards((prev) =>
+      prev.map((g) => (g.deviceId === deviceId ? { ...g, deviceId: null } : g))
+    );
+
+    if (hasFirebaseConfig && db) {
+      try {
+        for (const ag of affected) {
+          await updateItem('users', ag.id, { deviceId: null });
+        }
+      } catch (e) {
+        console.warn('Firestore unassign device error:', e);
+      }
+    }
+
+    addToast('Device Unbound', `Device ${deviceId} is now unassigned.`, 'info');
   };
 
   const deleteDevice = async (device) => {
@@ -873,6 +1135,7 @@ export function SpotProvider({ children }) {
         attendance,
         checkpointLogs,
         guardLocations,
+        checkpoints,
         stats,
         selectedGuard,
         isGuardDrawerOpen,
@@ -886,6 +1149,7 @@ export function SpotProvider({ children }) {
         // Guards CRUD
         addGuard,
         updateGuard,
+        updateGuardPassword,
         enrollGuardFace,
         deleteGuardFace,
         deleteGuard,
@@ -893,6 +1157,11 @@ export function SpotProvider({ children }) {
         addSite,
         updateSite,
         deleteSite,
+        // Checkpoints CRUD
+        addCheckpoint,
+        updateCheckpoint,
+        deleteCheckpoint,
+        batchGenerateSiteCheckpoints,
         // Clients CRUD
         addClient,
         updateClient,
@@ -905,6 +1174,7 @@ export function SpotProvider({ children }) {
         addPatrol,
         // Devices
         assignDeviceToGuard,
+        unassignDevice,
         deleteDevice,
       }}
     >

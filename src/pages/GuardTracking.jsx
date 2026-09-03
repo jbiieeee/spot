@@ -49,8 +49,8 @@ export default function GuardTracking() {
   const activeGuard = guards.find((g) => g.id === activeGuardId) || guards[0];
   const activePatrol = patrols.find((p) => p.guardId === activeGuard?.id);
 
-  // Prefer live Android GPS from guardLocations collection; fall back to users doc
-  const liveLocation = (guardLocations || {})[activeGuard?.id] || null;
+  // Prefer live Android GPS from guardLocations collection (keyed by guardId or deviceId); fall back to users doc
+  const liveLocation = (guardLocations || {})[activeGuard?.id] || (activeGuard?.deviceId ? (guardLocations || {})[activeGuard?.deviceId] : null);
   const isLive = Boolean(liveLocation && liveLocation.lat != null && liveLocation.lng != null);
 
   const displayLat = isLive ? liveLocation.lat : (activeGuard?.gpsLat ?? 14.5547);
@@ -79,7 +79,7 @@ export default function GuardTracking() {
         {/* Guard Selector Ribbon */}
         <div className="flex items-center gap-3 overflow-x-auto custom-scrollbar pb-2">
           {guards.map((guard) => {
-            const hasLive = (guardLocations || {})[guard.id]?.lat != null;
+            const hasLive = (guardLocations || {})[guard.id]?.lat != null || (guard.deviceId && (guardLocations || {})[guard.deviceId]?.lat != null);
             return (
               <button
                 key={guard.id}
@@ -93,10 +93,10 @@ export default function GuardTracking() {
                 <img src={guard.photo} alt={guard.name} className="h-7 w-7 rounded-full object-cover" />
                 <div className="text-left">
                   <div className="text-xs font-bold">{guard.name}</div>
-                  <div className="text-[10px] opacity-75">{guard.siteName}</div>
+                  <div className="text-[10px] opacity-75">{guard.siteName} {guard.deviceId ? `• ${guard.deviceId}` : ''}</div>
                 </div>
                 <span
-                  title={hasLive ? 'Live Android GPS' : 'No live data'}
+                  title={hasLive ? 'Live Android GPS Active' : 'No live data'}
                   className={`ml-1 h-2 w-2 rounded-full ${
                     hasLive
                       ? 'bg-emerald-400 animate-pulse'
@@ -270,14 +270,33 @@ export default function GuardTracking() {
               <div className="mt-4 space-y-3 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400 flex items-center gap-1.5">
-                    <Battery className="h-4 w-4 text-emerald-400" /> Battery:
+                    <Battery
+                      className={`h-4 w-4 ${
+                        displayBattery <= 20
+                          ? 'text-rose-400 animate-pulse'
+                          : displayBattery <= 40
+                          ? 'text-amber-400'
+                          : 'text-emerald-400'
+                      }`}
+                    />
+                    <span>Battery Telemetry:</span>
                   </span>
-                  <span className={`font-bold ${
-                    displayBattery <= 20 ? 'text-rose-400' :
-                    displayBattery <= 40 ? 'text-amber-400' : 'text-white'
-                  }`}>
-                    {displayBattery != null ? `${displayBattery}%` : '—'}
-                  </span>
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <span
+                      className={
+                        displayBattery <= 20
+                          ? 'text-rose-400'
+                          : displayBattery <= 40
+                          ? 'text-amber-400'
+                          : 'text-white'
+                      }
+                    >
+                      {displayBattery != null ? `${displayBattery}%` : '—'}
+                    </span>
+                    {(liveLocation?.isCharging || activeGuard?.isCharging) && (
+                      <Zap className="h-3.5 w-3.5 text-amber-400 animate-pulse" title="Device is charging" />
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between">

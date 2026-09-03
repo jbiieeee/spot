@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import Layout from '../components/Layout';
 import GuardAvatar from '../components/GuardAvatar';
 import { useSpot } from '../context/SpotContext';
-import { createIsolatedAuth } from '../lib/firebase';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createIsolatedAuth, auth } from '../lib/firebase';
+import { createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 import {
-  Users, Search, Battery, ShieldCheck, Eye, Plus, Pencil, Trash2, X,
-  Check, AlertTriangle, Smartphone, Link, Unlink, KeyRound
+  Users, Search, Battery, ShieldCheck, Eye, EyeOff, Plus, Pencil, Trash2, X,
+  Check, AlertTriangle, Smartphone, Link, Unlink, KeyRound, Zap, Lock, RefreshCw, Mail
 } from 'lucide-react';
 
 // ─── Reusable Modal Shell ────────────────────────────────────────────────────
@@ -45,38 +45,25 @@ function GuardFormFields({ form, onChange, sites = [], isAddMode = false }) {
   const handlePhotoUpload = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) return;
-
     const reader = new FileReader();
-    reader.onload = () => {
-      const image = new Image();
-      image.onload = () => {
-        const maxSize = 512;
-        const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(image.width * scale));
-        canvas.height = Math.max(1, Math.round(image.height * scale));
-        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-        onChange('photo', canvas.toDataURL('image/jpeg', 0.8));
-      };
-      image.src = reader.result;
-    };
+    reader.onload = (e) => onChange('photo', e.target?.result || '');
     reader.readAsDataURL(file);
   };
 
   const handleSiteChange = (e) => {
-    const siteId = e.target.value;
-    const site = sites.find(s => s.id === siteId);
-    onChange('siteId', siteId);
-    onChange('siteName', site?.name || '');
-    onChange('client', site?.client || form.client || '');
+    const selectedId = e.target.value;
+    const siteObj = sites.find((s) => s.id === selectedId);
+    onChange('siteId', selectedId);
+    if (siteObj) {
+      onChange('siteName', siteObj.name);
+      if (siteObj.client) onChange('client', siteObj.client);
+    }
   };
 
   return (
-    <>
-      {/* Login credentials — only shown when adding a new guard */}
+    <div className="space-y-4">
       {isAddMode && (
-        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
+        <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 p-4 space-y-3">
           <div className="flex items-center gap-2 text-xs font-bold text-blue-400 uppercase tracking-wider">
             <KeyRound className="h-3.5 w-3.5" /> Android App Login Credentials
           </div>
@@ -138,50 +125,31 @@ function GuardFormFields({ form, onChange, sites = [], isAddMode = false }) {
 
       <Field label="Profile Photo (optional)">
         <div className="flex items-center gap-3">
-          <GuardAvatar photo={form.photo} name={form.name} />
-          <label className="btn-secondary cursor-pointer text-xs">
-            Upload Photo
-            <input type="file" accept="image/*" className="sr-only" onChange={handlePhotoUpload} />
-          </label>
-          {form.photo && (
-            <button type="button" onClick={() => onChange('photo', '')} className="text-xs text-slate-400 hover:text-white">
-              Remove
-            </button>
-          )}
+          <GuardAvatar photo={form.photo} name={form.name || 'G'} size="h-12 w-12" />
+          <input type="file" accept="image/*" onChange={handlePhotoUpload} className="text-xs text-slate-400 file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-700 file:text-slate-200 hover:file:bg-slate-600" />
         </div>
-        <p className="text-[11px] text-slate-500">JPG, PNG, or WebP up to 5 MB. A neutral profile is used when no photo is set.</p>
       </Field>
-    </>
+    </div>
   );
 }
 
-const EMPTY_GUARD = { name: '', email: '', password: '', phone: '', siteId: '', siteName: '', client: '', shift: 'Day Shift (06:00 - 18:00)', status: 'Idle', photo: '' };
-
-// ─── Delete Confirmation Modal ────────────────────────────────────────────────
-function DeleteConfirm({ label, onCancel, onConfirm }) {
+// ─── Delete Confirmation Modal ───────────────────────────────────────────────
+function DeleteConfirm({ label, onConfirm, onCancel }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-      <div className="w-full max-w-sm rounded-2xl border border-rose-800/60 bg-[#1E293B] shadow-2xl p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-400">
-            <AlertTriangle className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="text-sm font-bold text-white">Confirm Deletion</div>
-            <div className="text-xs text-slate-400 mt-0.5">This action cannot be undone.</div>
-          </div>
-        </div>
-        <p className="text-xs text-slate-300 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-          You are about to permanently delete <span className="font-bold text-white">{label}</span>.
-        </p>
-        <div className="flex gap-3">
-          <button onClick={onCancel} className="btn-secondary flex-1 text-xs">Cancel</button>
-          <button onClick={onConfirm} className="flex-1 py-2 px-4 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition flex items-center justify-center gap-2">
-            <Trash2 className="h-3.5 w-3.5" /> Delete Permanently
-          </button>
-        </div>
-      </div>
-    </div>
+    <Modal
+      title="Confirm Guard Removal"
+      onClose={onCancel}
+      footer={
+        <>
+          <button onClick={onCancel} className="btn-secondary text-xs">Cancel</button>
+          <button onClick={onConfirm} className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-500 transition">Delete Guard</button>
+        </>
+      }
+    >
+      <p className="text-sm text-slate-300 leading-relaxed">
+        Are you sure you want to remove <strong className="text-white font-bold">{label}</strong> from the roster? This action cannot be undone.
+      </p>
+    </Modal>
   );
 }
 
@@ -212,7 +180,6 @@ function AssignDeviceModal({ guard, devices, onClose, onAssign }) {
         </>
       }
     >
-      {/* Current binding */}
       <div className={`flex items-center gap-3 rounded-xl p-3 border ${guard.deviceId ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-900/60 border-slate-700'}`}>
         <Smartphone className={`h-5 w-5 ${guard.deviceId ? 'text-emerald-400' : 'text-slate-500'}`} />
         <div>
@@ -223,7 +190,6 @@ function AssignDeviceModal({ guard, devices, onClose, onAssign }) {
         </div>
       </div>
 
-      {/* Device picker */}
       <Field label="Select a Registered Device">
         <select
           className="input-spot"
@@ -246,7 +212,6 @@ function AssignDeviceModal({ guard, devices, onClose, onAssign }) {
         </div>
       )}
 
-      {/* Device list */}
       {devices.length > 0 && (
         <div className="space-y-2">
           <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Registered Devices</div>
@@ -280,9 +245,214 @@ function AssignDeviceModal({ guard, devices, onClose, onAssign }) {
   );
 }
 
+// ─── Admin Change Password Modal ──────────────────────────────────────────────
+function ChangePasswordModal({ guard, onClose, onSave, addToast }) {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [emailStatus, setEmailStatus] = useState('');
+
+  const generateRandomPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
+    let pass = '';
+    for (let i = 0; i < 10; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setNewPassword(pass);
+    setConfirmPassword(pass);
+    setShowPassword(true);
+  };
+
+  const handleSave = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    setError('');
+    setSaving(true);
+    try {
+      await onSave(guard.id, newPassword);
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Failed to update guard password.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSendResetEmail = async () => {
+    if (!guard.email) {
+      setError('Guard has no email address registered on file.');
+      return;
+    }
+    setError('');
+    setEmailStatus('sending');
+    try {
+      await sendPasswordResetEmail(auth, guard.email.trim());
+      setEmailStatus('sent');
+      addToast('Reset Email Sent', `Password reset link sent to ${guard.email}`, 'success');
+    } catch (err) {
+      setError(err.message || 'Failed to send password reset email.');
+      setEmailStatus('');
+    }
+  };
+
+  return (
+    <Modal
+      title="Admin Password Management"
+      subtitle={`Change or reset mobile login password for ${guard.name}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button onClick={onClose} className="btn-secondary text-xs">Cancel</button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !newPassword}
+            className="btn-primary text-xs flex items-center gap-1.5"
+          >
+            {saving ? (
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            ) : (
+              <KeyRound className="h-3.5 w-3.5" />
+            )}
+            Update Guard Password
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {/* Guard Profile Overview */}
+        <div className="flex items-center gap-3 p-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
+          <GuardAvatar photo={guard.photo} name={guard.name} size="h-10 w-10" />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-bold text-white truncate">{guard.name}</div>
+            <div className="text-[11px] text-slate-400 font-mono truncate">{guard.email || 'No email attached'}</div>
+          </div>
+          <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-mono text-blue-400 border border-slate-700">
+            {guard.id}
+          </span>
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-400">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Direct Password Form */}
+        <div className="p-4 rounded-xl bg-slate-900/40 border border-slate-800 space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+              <Lock className="h-3.5 w-3.5 text-blue-400" /> Set New Password
+            </label>
+            <button
+              type="button"
+              onClick={generateRandomPassword}
+              className="text-[11px] text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1"
+            >
+              <RefreshCw className="h-3 w-3" /> Auto-Generate
+            </button>
+          </div>
+
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              className="input-spot pr-10 font-mono text-xs"
+              placeholder="Enter new password (min. 6 chars)"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute right-3 top-2.5 text-slate-400 hover:text-white"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-400 mb-1">Confirm New Password</label>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              className="input-spot font-mono text-xs"
+              placeholder="Confirm new password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </div>
+          <p className="text-[11px] text-slate-500">
+            When updated, the guard can use this new password immediately to log in on the Android mobile app.
+          </p>
+        </div>
+
+        {/* Email Password Reset Alternative */}
+        {guard.email && (
+          <div className="p-3.5 rounded-xl bg-slate-900/40 border border-slate-800/80 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Mail className="h-4 w-4 text-emerald-400" />
+              <div>
+                <div className="text-xs font-bold text-white">Send Official Reset Email</div>
+                <div className="text-[10px] text-slate-400">Sends a secure reset link to {guard.email}</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleSendResetEmail}
+              disabled={emailStatus === 'sending'}
+              className="btn-secondary py-1.5 px-3 text-xs flex items-center gap-1 text-emerald-400 hover:text-white"
+            >
+              {emailStatus === 'sending' ? (
+                'Sending...'
+              ) : emailStatus === 'sent' ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-emerald-400" /> Sent!
+                </>
+              ) : (
+                'Send Link'
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+const EMPTY_GUARD = {
+  name: '',
+  email: '',
+  password: '',
+  phone: '',
+  siteId: '',
+  siteName: '',
+  client: '',
+  shift: 'Day Shift (06:00 - 18:00)',
+  status: 'Idle',
+  photo: ''
+};
+
 // ─── Main Guards Page ─────────────────────────────────────────────────────────
 export default function Guards() {
-  const { guards, sites, devices, openGuardDrawer, addGuard, updateGuard, deleteGuard, assignDeviceToGuard, addToast } = useSpot();
+  const {
+    guards,
+    sites,
+    devices,
+    openGuardDrawer,
+    addGuard,
+    updateGuard,
+    updateGuardPassword,
+    deleteGuard,
+    assignDeviceToGuard,
+    addToast
+  } = useSpot();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -292,6 +462,7 @@ export default function Guards() {
   const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deviceTarget, setDeviceTarget] = useState(null);
+  const [passwordTarget, setPasswordTarget] = useState(null);
   const [addForm, setAddForm] = useState(EMPTY_GUARD);
   const [editForm, setEditForm] = useState(EMPTY_GUARD);
   const [saving, setSaving] = useState(false);
@@ -311,7 +482,6 @@ export default function Guards() {
     setAuthError('');
     setSaving(true);
 
-    // If email + password provided, create Firebase Auth account for the guard
     if (addForm.email?.trim() && addForm.password?.trim()) {
       const { auth: isolatedAuth, dispose } = createIsolatedAuth();
       try {
@@ -321,7 +491,6 @@ export default function Guards() {
           addForm.password.trim()
         );
         await updateProfile(cred.user, { displayName: addForm.name.trim() });
-        // Use the real Firebase UID as the guard's Firestore document ID
         await addGuard({ ...addForm, id: cred.user.uid, email: addForm.email.trim() });
         addToast('Guard Registered', `${addForm.name} — Firebase Auth account created. Guard can now log in to the Android app.`, 'success');
       } catch (err) {
@@ -333,7 +502,6 @@ export default function Guards() {
         dispose();
       }
     } else {
-      // No credentials — add to Firestore only (guard cannot log in to Android app yet)
       await addGuard(addForm);
     }
 
@@ -347,7 +515,6 @@ export default function Guards() {
     setEditForm({
       name: guard.name || '',
       email: guard.email || '',
-      password: '',
       phone: guard.phone || '',
       siteId: guard.siteId || '',
       siteName: guard.siteName || '',
@@ -368,78 +535,70 @@ export default function Guards() {
   };
 
   const handleDelete = async () => {
+    if (!deleteTarget) return;
     await deleteGuard(deleteTarget.id);
     setDeleteTarget(null);
   };
 
   return (
     <Layout
-      title="Guards Directory & Personnel Roster"
-      subtitle="Enterprise Active Roster, Battery Telemetry, Face Enrollment & Device Assignment"
+      title="Security Guards Roster"
+      subtitle="Enterprise Active Roster, Battery Telemetry, Face Enrollment, Device Binding & Credentials"
+      actions={
+        <button
+          onClick={() => { setShowAdd(true); setAuthError(''); }}
+          className="btn-primary text-xs flex items-center gap-1.5"
+        >
+          <Plus className="h-4 w-4" />
+          Add Guard
+        </button>
+      }
     >
       <div className="space-y-6">
-        {/* Header Controls */}
+        {/* Top Filter and Search Bar */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 card-spot p-4">
           <div className="relative flex-1 w-full max-w-md">
             <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
             <input
-              type="text"
+              className="input-spot pl-10"
+              placeholder="Search by guard name, ID, or site..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search guard by name, ID, or deployment site..."
-              className="input-spot pl-10"
             />
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
-              {['All', 'On Patrol', 'Idle', 'Emergency'].map((st) => (
-                <button
-                  key={st}
-                  onClick={() => setStatusFilter(st)}
-                  className={`px-3 py-1.5 rounded-lg font-semibold transition ${
-                    statusFilter === st ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {st}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setShowAdd(true)}
-              className="btn-primary text-xs flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" /> Add Guard
-            </button>
+          <div className="flex items-center gap-2">
+            {['All', 'On Patrol', 'Idle', 'Off Duty'].map((status) => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                  statusFilter === status
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                {status}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Devices Summary Banner */}
-        <div className="flex items-center gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 px-5 py-3">
-          <Smartphone className="h-5 w-5 text-blue-400 shrink-0" />
-          <div className="text-xs text-slate-300">
-            <span className="font-bold text-white">{devices.length}</span> registered device(s) available to assign.
-            <span className="ml-2 text-slate-400">
-              {guards.filter(g => g.deviceId).length} guard(s) currently have a device bound.
-            </span>
-          </div>
-        </div>
-
-        {/* Guards Enterprise Table */}
+        {/* Guards Table */}
         <div className="card-spot p-0 overflow-hidden border border-slate-800">
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left text-sm text-slate-300">
               <thead className="bg-slate-900/90 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
                 <tr>
-                  <th className="px-6 py-4">Guard Info</th>
-                  <th className="px-6 py-4">Client & Site</th>
-                  <th className="px-6 py-4">Shift</th>
+                  <th className="px-6 py-4">Guard Personnel</th>
+                  <th className="px-6 py-4">Site & Client</th>
+                  <th className="px-6 py-4">Shift Schedule</th>
                   <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4">Battery</th>
                   <th className="px-6 py-4">GPS Accuracy</th>
-                  <th className="px-6 py-4">Face Verified</th>
-                  <th className="px-6 py-4">Device</th>
-                  <th className="px-6 py-4">Actions</th>
+                  <th className="px-6 py-4">Face Biometrics</th>
+                  <th className="px-6 py-4">Assigned Phone</th>
+                  <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80">
@@ -450,40 +609,39 @@ export default function Guards() {
                         <div className="p-3 rounded-2xl bg-slate-800/60 border border-slate-700">
                           <Users className="h-7 w-7 text-slate-500" />
                         </div>
-                        <div className="text-sm text-slate-400 font-semibold">No guard personnel found</div>
-                        <div className="text-xs text-slate-500">Click "Add Guard" to register a new guard to the roster.</div>
+                        <div className="text-sm text-slate-400 font-semibold">No guards found</div>
+                        <div className="text-xs text-slate-500 max-w-xs text-center">
+                          Add a guard or try a different search filter to view your security force.
+                        </div>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   filteredGuards.map((guard) => (
-                    <tr
-                      key={guard.id}
-                      className="hover:bg-slate-800/50 transition"
-                    >
-                      {/* Guard Info */}
+                    <tr key={guard.id} className="hover:bg-slate-800/40 transition">
+                      {/* Guard Avatar & Name */}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <GuardAvatar photo={guard.photo} name={guard.name} />
+                          <GuardAvatar photo={guard.photo} name={guard.name} size="h-10 w-10" />
                           <div>
                             <div className="font-bold text-white text-sm">{guard.name}</div>
-                            <div className="text-xs font-mono text-blue-400">{guard.id}</div>
+                            <div className="text-[10px] text-blue-400 font-mono">{guard.id}</div>
                           </div>
                         </div>
                       </td>
 
-                      {/* Client & Site */}
+                      {/* Site & Client */}
                       <td className="px-6 py-4">
-                        <div className="font-semibold text-slate-200">{guard.siteName}</div>
-                        <div className="text-xs text-slate-400">{guard.client}</div>
+                        <div className="text-xs font-semibold text-white">{guard.siteName}</div>
+                        <div className="text-[10px] text-slate-400">{guard.client}</div>
                       </td>
 
                       {/* Shift */}
-                      <td className="px-6 py-4 text-xs font-medium text-slate-300">{guard.shift}</td>
+                      <td className="px-6 py-4 text-xs text-slate-300">{guard.shift}</td>
 
                       {/* Status */}
                       <td className="px-6 py-4">
-                        <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${
                           guard.status === 'On Patrol'
                             ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                             : guard.status === 'Emergency'
@@ -494,12 +652,37 @@ export default function Guards() {
                         </span>
                       </td>
 
-                      {/* Battery */}
+                      {/* Real-time Battery Telemetry */}
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <Battery className="h-4 w-4 text-emerald-400" />
-                          <span className="font-bold text-white text-xs">{guard.battery}%</span>
-                        </div>
+                        {guard.battery != null ? (
+                          <div className="flex items-center gap-1.5">
+                            <Battery
+                              className={`h-4 w-4 ${
+                                guard.battery <= 20
+                                  ? 'text-rose-400 animate-pulse'
+                                  : guard.battery <= 40
+                                  ? 'text-amber-400'
+                                  : 'text-emerald-400'
+                              }`}
+                            />
+                            <span
+                              className={`font-bold text-xs ${
+                                guard.battery <= 20
+                                  ? 'text-rose-400'
+                                  : guard.battery <= 40
+                                  ? 'text-amber-400'
+                                  : 'text-white'
+                              }`}
+                            >
+                              {guard.battery}%
+                            </span>
+                            {guard.isCharging && (
+                              <Zap className="h-3 w-3 text-amber-400 animate-pulse" title="Device is charging" />
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-500 font-mono">—</span>
+                        )}
                       </td>
 
                       {/* GPS Accuracy */}
@@ -530,26 +713,33 @@ export default function Guards() {
                         )}
                       </td>
 
-                      {/* Actions */}
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
+                      {/* Actions with Change Password Power */}
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => openGuardDrawer(guard)}
-                            title="Inspect Guard Drawer"
+                            title="Inspect Guard Telemetry Drawer"
                             className="p-1.5 rounded-lg border border-slate-700 bg-slate-800 text-blue-400 hover:text-white hover:border-blue-500 transition"
                           >
                             <Eye className="h-3.5 w-3.5" />
                           </button>
                           <button
                             onClick={() => openEdit(guard)}
-                            title="Edit Guard"
+                            title="Edit Guard Details"
                             className="p-1.5 rounded-lg border border-slate-700 bg-slate-800 text-amber-400 hover:text-white hover:border-amber-500 transition"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
                           <button
+                            onClick={() => setPasswordTarget(guard)}
+                            title="Admin Power: Change Guard Password"
+                            className="p-1.5 rounded-lg border border-slate-700 bg-slate-800 text-cyan-400 hover:text-white hover:border-cyan-500 transition shadow-sm"
+                          >
+                            <KeyRound className="h-3.5 w-3.5" />
+                          </button>
+                          <button
                             onClick={() => setDeviceTarget(guard)}
-                            title="Assign Device"
+                            title="Assign Hardware Phone"
                             className="p-1.5 rounded-lg border border-slate-700 bg-slate-800 text-violet-400 hover:text-white hover:border-violet-500 transition"
                           >
                             <Smartphone className="h-3.5 w-3.5" />
@@ -624,6 +814,16 @@ export default function Guards() {
         >
           <GuardFormFields form={editForm} onChange={(k, v) => setEditForm(f => ({ ...f, [k]: v }))} sites={sites} isAddMode={false} />
         </Modal>
+      )}
+
+      {/* ── Admin Change Password Modal ──────────────────────── */}
+      {passwordTarget && (
+        <ChangePasswordModal
+          guard={passwordTarget}
+          onClose={() => setPasswordTarget(null)}
+          onSave={updateGuardPassword}
+          addToast={addToast}
+        />
       )}
 
       {/* ── Assign Device Modal ───────────────────────────────── */}

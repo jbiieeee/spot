@@ -10,66 +10,70 @@
   }
 
   body {
-    @apply bg-[#0F172A] text-slate-100 antialiased selection:bg-blue-600 selection:text-white overflow-x-hidden;
+    @apply bg-[#0B1120] text-slate-100 antialiased selection:bg-blue-600 selection:text-white overflow-x-hidden;
   }
 }
 
 @layer components {
-  /* Buttons: Rounded 10px */
+  /* Buttons: Sleek Command Styling */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-[10px] px-4 py-2 text-sm font-medium transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98];
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98];
   }
   .btn-primary {
-    @apply btn bg-[#2563EB] text-white shadow-lg shadow-blue-600/20 hover:bg-blue-600 hover:shadow-blue-600/30 border border-blue-500/30;
+    @apply btn bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/25 hover:from-blue-500 hover:to-indigo-500 hover:shadow-blue-600/40 border border-blue-400/30;
   }
   .btn-secondary {
-    @apply btn border border-slate-700 bg-slate-800/80 text-slate-200 hover:border-slate-600 hover:bg-slate-700/80 hover:text-white;
+    @apply btn border border-slate-700/80 bg-slate-800/80 text-slate-200 hover:border-slate-600 hover:bg-slate-700/90 hover:text-white backdrop-blur-sm;
   }
   .btn-danger {
-    @apply btn bg-[#EF4444] text-white shadow-lg shadow-red-600/20 hover:bg-red-600 border border-red-500/30;
+    @apply btn bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-lg shadow-rose-600/25 hover:from-rose-500 hover:to-red-500 border border-rose-400/30;
   }
   .btn-ghost {
     @apply btn text-slate-400 hover:bg-slate-800/60 hover:text-slate-100;
   }
 
-  /* Cards: Rounded 16px */
+  /* Cards: Modern Command Glassmorphism */
   .card-spot {
-    @apply rounded-[16px] border border-slate-800/90 bg-[#1E293B] p-5 shadow-xl shadow-slate-950/40 transition-all duration-200 hover:border-slate-700/80;
+    @apply rounded-2xl border border-slate-800/80 bg-[#131D31]/90 p-5 shadow-xl shadow-slate-950/50 backdrop-blur-md transition-all duration-200 hover:border-slate-700;
+  }
+
+  .glass-panel {
+    @apply rounded-2xl border border-slate-700/60 bg-slate-900/70 backdrop-blur-xl shadow-2xl shadow-slate-950/60;
   }
 
   /* Input fields */
   .input-spot {
-    @apply w-full rounded-[10px] border border-slate-700/80 bg-slate-900/90 px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition-all focus:border-[#2563EB] focus:ring-2 focus:ring-blue-500/20;
+    @apply w-full rounded-xl border border-slate-700/80 bg-slate-900/90 px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20;
   }
 
   /* Badges */
   .badge-spot {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold tracking-wide uppercase;
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold tracking-wide uppercase;
   }
   .badge-success {
-    @apply badge-spot bg-emerald-500/15 text-[#22C55E] border border-emerald-500/30;
+    @apply badge-spot bg-emerald-500/15 text-emerald-400 border border-emerald-500/30;
   }
   .badge-warning {
-    @apply badge-spot bg-amber-500/15 text-[#F59E0B] border border-amber-500/30;
+    @apply badge-spot bg-amber-500/15 text-amber-400 border border-amber-500/30;
   }
   .badge-danger {
-    @apply badge-spot bg-rose-500/15 text-[#EF4444] border border-rose-500/30;
+    @apply badge-spot bg-rose-500/15 text-rose-400 border border-rose-500/30;
   }
   .badge-info {
-    @apply badge-spot bg-blue-500/15 text-[#2563EB] border border-blue-500/30;
+    @apply badge-spot bg-blue-500/15 text-blue-400 border border-blue-500/30;
   }
   .badge-neutral {
-    @apply badge-spot bg-slate-800 text-[#64748B] border border-slate-700;
+    @apply badge-spot bg-slate-800 text-slate-400 border border-slate-700;
   }
 }
 
-/* Custom Scrollbars & Utilities */
+/* Custom Scrollbars */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: #0F172A;
+  background: #0B1120;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: #334155;
@@ -79,7 +83,7 @@
   background: #475569;
 }
 
-/* Radar pulse animation for map markers and live indicators */
+/* Radar pulse & emergency animations */
 @keyframes radar-pulse {
   0% {
     transform: scale(0.95);
@@ -106,6 +110,30 @@
   }
 }
 
+@keyframes toast-progress {
+  0% {
+    width: 100%;
+  }
+  100% {
+    width: 0%;
+  }
+}
+
+@keyframes slide-in {
+  0% {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.25s ease-out forwards;
+}
+
 .radar-ping {
   animation: radar-pulse 2s infinite;
 }
@@ -116,7 +144,7 @@
 
 /* Leaflet custom dark map styles */
 .leaflet-container {
-  background-color: #0F172A !important;
+  background-color: #0B1120 !important;
   font-family: inherit !important;
 }
 
@@ -124,7 +152,7 @@
   background-color: #1E293B !important;
   color: #F8FAFC !important;
   border: 1px solid #334155 !important;
-  border-radius: 12px !important;
+  border-radius: 14px !important;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5) !important;
 }
 .leaflet-popup-tip {
@@ -138,4 +166,43 @@
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PRINT MEDIA STYLING — For Checkpoint QR Placards & Batch Sheets
+   ───────────────────────────────────────────────────────────── */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Hide app navigation chrome */
+  header, aside, .no-print, button, .toast-container {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  /* Ensure QR code container prints cleanly */
+  .printable-qr-card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    border: 2px solid #000000 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    margin-bottom: 20px;
+    padding: 24px !important;
+    text-align: center;
+  }
+
+  .printable-qr-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 16px !important;
+    width: 100% !important;
+  }
 }

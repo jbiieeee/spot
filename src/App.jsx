@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Guards from './pages/Guards';
 import Sites from './pages/Sites';
+import Checkpoints from './pages/Checkpoints';
 import Clients from './pages/Clients';
 import PatrolOperations from './pages/Routes';
 import Schedules from './pages/Schedules';
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/guards" element={<Guards />} />
         <Route path="/face-verify" element={<FaceVerify />} />
         <Route path="/sites" element={<Sites />} />
+        <Route path="/checkpoints" element={<Checkpoints />} />
         <Route path="/clients" element={<Clients />} />
         <Route path="/schedules" element={<Schedules />} />
         <Route path="/incidents" element={<Incidents />} />
