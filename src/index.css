@@ -8,6 +8,8 @@
    CSS CUSTOM PROPERTIES — S.P.O.T Design Tokens
    ───────────────────────────────────────────────────────────── */
 :root {
+  --pointer-x: 50%;
+  --pointer-y: 35%;
   --color-bg-base:        #080E1A;
   --color-bg-surface:     #0E1626;
   --color-bg-elevated:    #131D31;
@@ -60,7 +62,10 @@
 
   body {
     @apply antialiased overflow-x-hidden;
-    background-color: var(--color-bg-base);
+    background:
+      radial-gradient(circle at 8% 0%, rgba(34, 211, 238, 0.08), transparent 28rem),
+      radial-gradient(circle at 92% 100%, rgba(16, 185, 129, 0.06), transparent 32rem),
+      var(--color-bg-base);
     color: #e2e8f0;
     selection-background-color: #2563eb;
     selection-color: white;
@@ -76,6 +81,21 @@
   * {
     scroll-behavior: smooth;
   }
+}
+
+.command-shell {
+  isolation: isolate;
+}
+
+.command-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(circle 24rem at var(--pointer-x) var(--pointer-y), rgba(34, 211, 238, 0.08), transparent 72%);
+  opacity: 0.9;
+  transition: background-position 180ms ease-out;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -364,6 +384,28 @@
   100% { opacity: 1; }
 }
 
+@keyframes sync-sheen {
+  0% { filter: brightness(0.9); transform: translateX(-2%); }
+  50% { filter: brightness(1.35); }
+  100% { filter: brightness(0.9); transform: translateX(2%); }
+}
+
+@keyframes page-settle {
+  0% { opacity: 0; transform: translateY(8px); filter: saturate(0.7); }
+  100% { opacity: 1; transform: translateY(0); filter: saturate(1); }
+}
+
+@keyframes face-guide-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.98); }
+  50% { opacity: 1; transform: scale(1.02); }
+}
+
+@keyframes face-scan {
+  0% { top: 8%; opacity: 0; }
+  18%, 82% { opacity: 1; }
+  100% { top: 92%; opacity: 0; }
+}
+
 /* Shimmer sweep */
 @keyframes shimmer {
   0%   { transform: translateX(-100%); }
@@ -425,11 +467,31 @@
 .animate-slide-in-left  { animation: slide-in-left 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
 .animate-fade-up        { animation: fade-up 0.3s ease-out forwards; }
 .animate-fade-in        { animation: fade-in 0.3s ease forwards; }
+.page-transition        { animation: page-settle 0.38s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.sync-progress-fill     { animation: sync-sheen 1.6s ease-in-out infinite; box-shadow: 0 0 12px rgba(34, 211, 238, 0.75); }
+.face-guide-pulse       { animation: face-guide-pulse 1.8s ease-in-out infinite; }
+.face-tracking-frame    { position: absolute; border: 2px solid rgba(34, 211, 238, 0.9); border-radius: 42% 42% 38% 38%; box-shadow: 0 0 22px rgba(34, 211, 238, 0.45), inset 0 0 18px rgba(34, 211, 238, 0.08); animation: face-guide-pulse 1.4s ease-in-out infinite; }
+.face-tracking-point    { position: absolute; width: 7px; height: 7px; border: 1px solid #a5f3fc; border-radius: 50%; background: #22d3ee; box-shadow: 0 0 10px rgba(34, 211, 238, 0.9); }
+.face-landmark          { position: absolute; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: #ecfeff; box-shadow: 0 0 7px rgba(34, 211, 238, 0.95); opacity: 0.9; }
+.point-top-left         { left: 16%; top: 18%; }
+.point-top-right        { right: 16%; top: 18%; }
+.point-bottom-left      { left: 18%; bottom: 17%; }
+.point-bottom-right     { right: 18%; bottom: 17%; }
+.face-scan-line         { position: absolute; left: 8%; right: 8%; height: 1px; background: #67e8f9; box-shadow: 0 0 12px #22d3ee; animation: face-scan 1.8s linear infinite; }
 .animate-scale-in       { animation: scale-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
 .animate-shake          { animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
 .animate-float          { animation: float 4s ease-in-out infinite; }
 .radar-ping             { animation: radar-pulse 2s infinite; }
 .emergency-flash        { animation: emergency-pulse 1.2s infinite ease-in-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 /* Staggered animation delay utilities */
 .delay-75  { animation-delay: 75ms; }

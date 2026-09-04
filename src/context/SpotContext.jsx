@@ -53,9 +53,11 @@ export function SpotProvider({ children }) {
   const [checkpointLogs, setCheckpointLogs] = useState([]);
   const [guardLocations, setGuardLocations] = useState({});
   const [checkpoints, setCheckpoints] = useState([]);
+  const [faceProfiles, setFaceProfiles] = useState([]);
 
   // Database Connection Indicator
   const [dbConnected, setDbConnected] = useState(Boolean(hasFirebaseConfig && db));
+  const [syncProgress, setSyncProgress] = useState(hasFirebaseConfig && db ? 0 : 100);
 
   // Drawer & Modal States
   const [selectedGuard, setSelectedGuard] = useState(null);
@@ -65,11 +67,16 @@ export function SpotProvider({ children }) {
   // Track previous guards & live locations to detect device / battery telemetry updates
   const prevGuardsRef = useRef({});
   const guardLocationsRef = useRef({});
+  const syncReadyRef = useRef(new Set());
 
   // Toasts Notification Stack
   const [toasts, setToasts] = useState([]);
+  const toastKeysRef = useRef(new Set());
 
   const addToast = (title, message, type = 'info', duration = 3000) => {
+    const toastKey = `${title}:${message}`;
+    if (toastKeysRef.current.has(toastKey)) return;
+    toastKeysRef.current.add(toastKey);
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const newToast = {
       id,
@@ -84,6 +91,7 @@ export function SpotProvider({ children }) {
     // Automatically remove toast after 3 seconds
     setTimeout(() => {
       removeToast(id);
+      toastKeysRef.current.delete(toastKey);
     }, duration);
   };
 
@@ -111,8 +119,21 @@ export function SpotProvider({ children }) {
   useEffect(() => {
     if (!hasFirebaseConfig || !db) return;
 
+    const syncSources = new Set([
+      'incidents', 'sites', 'client_sites', 'users', 'patrolLogs', 'patrol_schedules',
+      'adminLogs', 'clients', 'devices', 'attendance', 'checkpoint_logs',
+      'guardLocations', 'checkpoints', 'faceProfiles'
+    ]);
+    syncReadyRef.current = new Set();
+    setSyncProgress(0);
+    const subscribeWithSync = (name, callback) => subscribeCollection(name, (data) => {
+      callback(data);
+      syncReadyRef.current.add(name);
+      setSyncProgress(Math.round((syncReadyRef.current.size / syncSources.size) * 100));
+    });
+
     // 1. Incidents
-    const unsubIncidents = subscribeCollection('incidents', (fsIncidents) => {
+    const unsubIncidents = subscribeWithSync('incidents', (fsIncidents) => {
       const formatted = (fsIncidents || []).map((doc) => ({
         id: doc.id,
         title: doc.title || doc.type || 'Field Incident',
@@ -141,7 +162,7 @@ export function SpotProvider({ children }) {
       setSites(all);
     };
 
-    const unsubSites = subscribeCollection('sites', (fsSites) => {
+    const unsubSites = subscribeWithSync('sites', (fsSites) => {
       webSites = (fsSites || []).map((doc) => ({
         id: doc.id,
         name: doc.name || doc.siteName || 'Managed Site',
@@ -160,7 +181,7 @@ export function SpotProvider({ children }) {
       mergeSites();
     });
 
-    const unsubClientSites = subscribeCollection('client_sites', (fsSites) => {
+    const unsubClientSites = subscribeWithSync('client_sites', (fsSites) => {
       androidSites = (fsSites || []).map((doc) => ({
         id: doc.id,
         name: doc.siteName || doc.name || 'Managed Site',
@@ -180,7 +201,7 @@ export function SpotProvider({ children }) {
     });
 
     // 3. Guards / Users
-    const unsubUsers = subscribeCollection('users', (fsUsers) => {
+    const unsubUsers = subscribeWithSync('users', (fsUsers) => {
       const formatted = (fsUsers || [])
         .filter((u) => u.role === 'guard' || u.role === 'Guard' || !u.role)
         .map((u) => {
@@ -265,15 +286,25 @@ export function SpotProvider({ children }) {
       setGuards(formatted);
     });
 
+    // Canonical face enrollment records used by the web and guard apps.
+    const unsubFaceProfiles = subscribeWithSync('faceProfiles', (fsProfiles) => {
+      setFaceProfiles((fsProfiles || []).map((doc) => ({
+        id: doc.id,
+        guardId: doc.guardId || doc.id,
+        imageUrl: doc.imageUrl || '',
+        imageDataUrl: doc.imageDataUrl || '',
+        faceDescriptor: doc.faceDescriptor || null,
+        updatedAt: doc.updatedAt || doc.enrolledAt || null,
+      })));
+    });
+
     // 4. Patrols — merge patrolLogs + patrol_schedules
     let webPatrols = [];
     let androidPatrols = [];
     const mergePatrols = () => {
-      const all = [...webPatrols];
-      androidPatrols.forEach(ap => {
-        if (!all.find(p => p.id === ap.id)) all.push(ap);
-      });
-      setPatrols(all);
+      const merged = new Map(webPatrols.map((patrol) => [patrol.id, patrol]));
+      androidPatrols.forEach((patrol) => merged.set(patrol.id, patrol));
+      setPatrols([...merged.values()]);
     };
 
     const mapPatrolDoc = (doc) => ({
@@ -283,7 +314,7 @@ export function SpotProvider({ children }) {
       guardPhoto: doc.guardPhoto || '',
       siteName: doc.siteName || 'Site',
       routeName: doc.routeName || doc.routeId || 'Patrol Route',
-      status: doc.status || 'In Progress',
+      status: doc.status === 'active' ? 'In Progress' : (doc.status || 'In Progress'),
       progressPct: doc.progressPct || 0,
       completedCount: doc.completedCount || 0,
       totalCount: doc.totalCount || 0,
@@ -293,18 +324,18 @@ export function SpotProvider({ children }) {
       checkpoints: doc.checkpoints || []
     });
 
-    const unsubPatrols = subscribeCollection('patrolLogs', (fsLogs) => {
+    const unsubPatrols = subscribeWithSync('patrolLogs', (fsLogs) => {
       webPatrols = (fsLogs || []).map(mapPatrolDoc);
       mergePatrols();
     });
 
-    const unsubPatrolSchedules = subscribeCollection('patrol_schedules', (fsLogs) => {
+    const unsubPatrolSchedules = subscribeWithSync('patrol_schedules', (fsLogs) => {
       androidPatrols = (fsLogs || []).map(mapPatrolDoc);
       mergePatrols();
     });
 
     // 5. Audit Logs
-    const unsubAudit = subscribeCollection('adminLogs', (fsAudit) => {
+    const unsubAudit = subscribeWithSync('adminLogs', (fsAudit) => {
       const formatted = (fsAudit || []).map((doc) => ({
         id: doc.id,
         timestamp: doc.timestamp?.toDate ? doc.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently',
@@ -319,7 +350,7 @@ export function SpotProvider({ children }) {
     });
 
     // 6. Clients
-    const unsubClients = subscribeCollection('clients', (fsClients) => {
+    const unsubClients = subscribeWithSync('clients', (fsClients) => {
       const formatted = (fsClients || []).map((doc) => ({
         id: doc.id,
         company: doc.company || doc.name || 'Client Organization',
@@ -339,7 +370,7 @@ export function SpotProvider({ children }) {
     });
 
     // 7. Devices
-    const unsubDevices = subscribeCollection('devices', (fsDevices) => {
+    const unsubDevices = subscribeWithSync('devices', (fsDevices) => {
       const formatted = (fsDevices || []).map((d) => ({
         id: d.id,
         deviceId: d.deviceId || d.id,
@@ -352,7 +383,7 @@ export function SpotProvider({ children }) {
     });
 
     // 8. Attendance (from Android app)
-    const unsubAttendance = subscribeCollection('attendance', (fsDocs) => {
+    const unsubAttendance = subscribeWithSync('attendance', (fsDocs) => {
       const formatted = (fsDocs || []).map((doc) => ({
         id: doc.id,
         guardId: doc.guardId || doc.userId || '',
@@ -369,7 +400,7 @@ export function SpotProvider({ children }) {
     });
 
     // 9. Checkpoint logs (from Android app)
-    const unsubCheckpointLogs = subscribeCollection('checkpoint_logs', (fsDocs) => {
+    const unsubCheckpointLogs = subscribeWithSync('checkpoint_logs', (fsDocs) => {
       const formatted = (fsDocs || []).map((doc) => ({
         id: doc.id,
         guardId: doc.guardId || '',
@@ -384,7 +415,7 @@ export function SpotProvider({ children }) {
     });
 
     // 10. Guard live locations (from Android app GPS & telemetry service)
-    const unsubGuardLocations = subscribeCollection('guardLocations', (fsDocs) => {
+    const unsubGuardLocations = subscribeWithSync('guardLocations', (fsDocs) => {
       const locationMap = {};
       (fsDocs || []).forEach((doc) => {
         const liveBatt = normalizeBattery(
@@ -432,7 +463,7 @@ export function SpotProvider({ children }) {
     });
 
     // 11. Checkpoints
-    const unsubCheckpoints = subscribeCollection('checkpoints', (fsCheckpoints) => {
+    const unsubCheckpoints = subscribeWithSync('checkpoints', (fsCheckpoints) => {
       const formatted = (fsCheckpoints || []).map((doc) => ({
         id: doc.id,
         name: doc.name || doc.locationName || 'Checkpoint Post',
@@ -455,6 +486,7 @@ export function SpotProvider({ children }) {
       unsubSites();
       unsubClientSites();
       unsubUsers();
+      unsubFaceProfiles();
       unsubPatrols();
       unsubPatrolSchedules();
       unsubAudit();
@@ -473,7 +505,7 @@ export function SpotProvider({ children }) {
   const persistGuardPhoto = (photo) => photo || '';
 
   const addGuard = async (newGuard) => {
-    const guardId = `G-${Date.now().toString().slice(-4)}`;
+    const guardId = newGuard.id || `G-${Date.now().toString().slice(-4)}`;
     const photo = persistGuardPhoto(newGuard.photo);
     const created = {
       id: guardId,
@@ -504,9 +536,10 @@ export function SpotProvider({ children }) {
 
     if (hasFirebaseConfig && db) {
       try {
-        await addItem('users', created);
+        await setItem('users', guardId, created);
       } catch (e) {
-        console.warn('Firestore add user:', e);
+        console.error('Firestore add user:', e);
+        throw new Error('The login account was created, but its guard profile could not be saved. Do not retry with the same email; contact an administrator to repair the profile.');
       }
     }
     addToast('Guard Registered', `${created.name} has been added to the roster.`, 'success');
@@ -569,13 +602,14 @@ export function SpotProvider({ children }) {
 
     const enrolledAt = new Date();
     const enrolledAtLabel = enrolledAt.toLocaleString();
+    const faceProfileId = guard.id;
     const facePhotoUrl = '';
 
     const userPatch = {
       faceVerified: true,
       faceVerifiedAt: enrolledAtLabel,
       faceEnrollmentStatus: 'enrolled',
-      faceProfileId: guard.id,
+      faceProfileId,
       facePhotoUrl: facePhotoUrl || guard.facePhotoUrl || '',
       faceDetectorSupported: Boolean(capture.faceDetectorSupported),
       faceDetected: capture.faceDetected !== false,
@@ -586,7 +620,9 @@ export function SpotProvider({ children }) {
     }
 
     const faceProfile = {
+      profileId: faceProfileId,
       guardId: guard.id,
+      guardUid: guard.id,
       guardName: guard.name || 'Guard',
       siteId: guard.siteId || '',
       siteName: guard.siteName || '',
@@ -619,7 +655,7 @@ export function SpotProvider({ children }) {
     if (hasFirebaseConfig && db) {
       try {
         await setItem('faceProfiles', guard.id, faceProfile);
-        await updateItem('users', guard.id, userPatch);
+        await setItem('users', guard.id, userPatch);
         await addItem('attendance', attendanceRecord);
       } catch (e) {
         console.warn('Firestore face enrollment:', e);
@@ -1060,7 +1096,7 @@ export function SpotProvider({ children }) {
       guardPhoto: '',
       siteName: newPatrol.siteName || 'Facility Site',
       routeName: newPatrol.routeName || 'Perimeter Sweep',
-      status: 'In Progress',
+      status: 'active',
       progressPct: 0,
       completedCount: 0,
       totalCount: 5,
@@ -1078,7 +1114,14 @@ export function SpotProvider({ children }) {
 
     if (hasFirebaseConfig && db) {
       try {
-        await addItem('patrolLogs', created);
+        // Use one explicit ID so the admin and guard clients update the same task.
+        await setItem('patrol_schedules', created.id, {
+          ...created,
+          startedAt: new Date(),
+          totalCheckpoints: created.totalCount,
+          completedCount: created.completedCount,
+          syncStatus: 'assigned'
+        });
       } catch (e) {
         console.warn('Firestore add patrol:', e);
       }
@@ -1124,6 +1167,7 @@ export function SpotProvider({ children }) {
         sidebarCollapsed,
         toggleSidebar,
         dbConnected,
+        syncProgress,
         guards,
         sites,
         clients,
@@ -1136,6 +1180,7 @@ export function SpotProvider({ children }) {
         checkpointLogs,
         guardLocations,
         checkpoints,
+        faceProfiles,
         stats,
         selectedGuard,
         isGuardDrawerOpen,

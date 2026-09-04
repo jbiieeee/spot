@@ -3,8 +3,7 @@ import Layout from '../components/Layout';
 import GuardAvatar from '../components/GuardAvatar';
 import { useSpot } from '../context/SpotContext';
 import { useAuth } from '../context/AuthContext';
-import { estimateFaceMatchScore } from '../lib/faceRecognition';
-import { hasFaceApiConfig, verifyFaceWithApi } from '../lib/faceApi';
+import { hasFaceApiConfig, trackFaceWithApi, verifyFaceWithApi } from '../lib/faceApi';
 import {
   Camera, ShieldCheck, X, ScanFace, AlertTriangle, CheckCircle2,
   RefreshCw, UserCheck, SunMedium
@@ -71,10 +70,18 @@ async function detectFaces(dataUrl) {
   }
 }
 
-async function getReferenceFaceDataUrl(guard) {
+async function getReferenceFaceDataUrl(guard, faceProfiles) {
   if (!guard) return null;
 
-  const candidateUrls = [guard.facePhoto, guard.facePhotoUrl];
+  const profile = (faceProfiles || []).find((item) =>
+    item.id === guard.faceProfileId || item.guardId === guard.id
+  );
+  const candidateUrls = [
+    profile?.imageDataUrl,
+    profile?.imageUrl,
+    guard.facePhoto,
+    guard.facePhotoUrl,
+  ];
   for (const value of candidateUrls) {
     if (!value) continue;
     if (value.startsWith('data:')) return value;
@@ -119,7 +126,7 @@ function GuardPill({ guard, selected, onClick }) {
 }
 
 export default function FaceVerify() {
-  const { guards, addToast, enrollGuardFace, deleteGuardFace } = useSpot();
+  const { guards, faceProfiles, addToast, enrollGuardFace, deleteGuardFace } = useSpot();
   const { profile } = useAuth();
   const canManageFaceProfiles = ['admin', 'supervisor'].includes(String(profile?.role || '').toLowerCase());
 
@@ -127,6 +134,8 @@ export default function FaceVerify() {
   const streamRef = useRef(null);
   const intervalRef = useRef(null);
   const resetTimerRef = useRef(null);
+  const faceDetectorRef = useRef(null);
+  const trackingBusyRef = useRef(false);
 
   const [selectedGuard, setSelectedGuard] = useState(null);
   const [cameraActive, setCameraActive] = useState(false);
@@ -136,6 +145,7 @@ export default function FaceVerify() {
   const [status, setStatus] = useState('idle'); // idle | capturing | verifying | success | failed
   const [savingEnrollment, setSavingEnrollment] = useState(false);
   const [brightness, setBrightness] = useState(0);
+  const [faceTracking, setFaceTracking] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const guardList = guards.filter(
@@ -154,6 +164,7 @@ export default function FaceVerify() {
       setCameraError('');
       setCapturedImage(null);
       setCapturedFace(null);
+      setFaceTracking(null);
 
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('Camera capture is not supported in this browser.');
@@ -170,11 +181,47 @@ export default function FaceVerify() {
       setCameraActive(true);
       setStatus('capturing');
 
+      if ('FaceDetector' in window) {
+        faceDetectorRef.current = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+      }
+
       // Live preview frames
-      intervalRef.current = setInterval(() => {
+      intervalRef.current = setInterval(async () => {
         if (!videoRef.current || !videoRef.current.videoWidth) return;
         const { brightness: b } = captureFrame(videoRef.current, 240);
         setBrightness(b);
+        if ((!faceDetectorRef.current && !hasFaceApiConfig()) || trackingBusyRef.current) return;
+
+        trackingBusyRef.current = true;
+        try {
+          const faces = faceDetectorRef.current
+            ? await faceDetectorRef.current.detect(videoRef.current)
+            : [];
+          let box = faces[0]?.boundingBox;
+          const videoWidth = videoRef.current.videoWidth;
+          const videoHeight = videoRef.current.videoHeight;
+          const cropSize = Math.min(videoWidth, videoHeight);
+          const cropLeft = (videoWidth - cropSize) / 2;
+          let landmarkData = null;
+          if (hasFaceApiConfig()) {
+            landmarkData = await trackFaceWithApi(videoRef.current);
+            box = box || landmarkData?.box;
+          }
+          setFaceTracking(box ? {
+            left: ((cropSize - (box.x - cropLeft) - box.width) / cropSize) * 100,
+            top: (box.y / cropSize) * 100,
+            width: (box.width / cropSize) * 100,
+            height: (box.height / cropSize) * 100,
+            points: landmarkData?.points?.map((point) => ({
+              left: ((cropSize - (point.x - cropLeft)) / cropSize) * 100,
+              top: (point.y / cropSize) * 100,
+            })),
+          } : null);
+        } catch {
+          setFaceTracking(null);
+        } finally {
+          trackingBusyRef.current = false;
+        }
       }, 200);
     } catch (e) {
       setStatus('failed');
@@ -196,6 +243,9 @@ export default function FaceVerify() {
     }
     if (videoRef.current) videoRef.current.srcObject = null;
     setCameraActive(false);
+    setFaceTracking(null);
+    faceDetectorRef.current = null;
+    trackingBusyRef.current = false;
     setStatus('idle');
     setBrightness(0);
   }, []);
@@ -234,16 +284,27 @@ export default function FaceVerify() {
 
       let aiMatchScore = null;
       let aiMatch = null;
-      const referenceFace = await getReferenceFaceDataUrl(selectedGuard);
+      // First enrollment only checks that a face is present. Compare against a
+      // stored profile only when this guard is already enrolled.
+      const hasExistingEnrollment = Boolean(
+        selectedGuard.faceVerified || faceProfiles.some((profile) =>
+          profile.id === selectedGuard.faceProfileId || profile.guardId === selectedGuard.id
+        )
+      );
+      const referenceFace = hasExistingEnrollment
+        ? await getReferenceFaceDataUrl(selectedGuard, faceProfiles)
+        : null;
 
       if (referenceFace) {
         if (hasFaceApiConfig()) {
           try {
             const apiResult = await verifyFaceWithApi(dataUrl, referenceFace);
             if (apiResult) {
-              aiMatchScore = Number(apiResult.score || 0);
-              aiMatch = Boolean(apiResult.success);
-              if (apiResult.success) {
+              if (apiResult.compared) {
+                aiMatchScore = Number(apiResult.score);
+                aiMatch = Boolean(apiResult.success);
+              }
+              if (apiResult.compared && apiResult.success) {
                 addToast('Azure Face Verified', `${selectedGuard.name} matched the enrolled face profile with ${(aiMatchScore * 100).toFixed(0)}% confidence.`, 'success');
               }
             }
@@ -253,8 +314,7 @@ export default function FaceVerify() {
         }
 
         if (aiMatchScore === null) {
-          aiMatchScore = estimateFaceMatchScore(dataUrl, referenceFace);
-          aiMatch = aiMatchScore >= 0.72;
+          addToast('AI Face Check Unavailable', 'The face model could not compare the enrolled image. Browser detection still confirmed a face.', 'info');
         }
       }
 
@@ -267,7 +327,7 @@ export default function FaceVerify() {
 
       setCapturedFace(nextFaceCheck);
 
-      if (referenceFace && aiMatchScore !== null && !aiMatch) {
+      if (referenceFace && aiMatch === false && aiMatchScore !== null) {
         addToast('AI Face Mismatch', `Similarity score ${aiMatchScore.toFixed(2)} is too low for ${selectedGuard.name}. Please retake the photo or select the correct guard.`, 'warning');
       }
 
@@ -284,7 +344,7 @@ export default function FaceVerify() {
   const handleVerify = async () => {
     if (!selectedGuard || !capturedImage || savingEnrollment) return;
 
-    if (capturedFace?.referenceAvailable && capturedFace.aiMatch === false) {
+    if (capturedFace?.referenceAvailable && capturedFace.aiMatch === false && capturedFace.aiMatchScore !== null) {
       setStatus('failed');
       addToast('AI Face Mismatch', `Similarity score ${((capturedFace.aiMatchScore ?? 0)).toFixed(2)} is too low. Please retake the face or pick the correct guard.`, 'danger');
       return;
@@ -498,7 +558,32 @@ export default function FaceVerify() {
               {/* Face guide overlay */}
               {cameraActive && !capturedImage && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="h-48 w-40 rounded-full border-4 border-blue-400/60 shadow-[0_0_40px_rgba(59,130,246,0.25)]" />
+                  {faceTracking ? (
+                    <div
+                      className="face-tracking-frame"
+                      style={{
+                        left: `${faceTracking.left}%`,
+                        top: `${faceTracking.top}%`,
+                        width: `${faceTracking.width}%`,
+                        height: `${faceTracking.height}%`,
+                      }}
+                    >
+                      <span className="face-tracking-point point-top-left" />
+                      <span className="face-tracking-point point-top-right" />
+                      <span className="face-tracking-point point-bottom-left" />
+                      <span className="face-tracking-point point-bottom-right" />
+                      {faceTracking.points?.map((point, index) => (
+                        <span
+                          key={index}
+                          className="face-landmark"
+                          style={{ left: `${point.left}%`, top: `${point.top}%` }}
+                        />
+                      ))}
+                      <span className="face-scan-line" />
+                    </div>
+                  ) : (
+                    <div className="h-48 w-40 rounded-full border-4 border-blue-400/60 shadow-[0_0_40px_rgba(59,130,246,0.25)] face-guide-pulse" />
+                  )}
                 </div>
               )}
 

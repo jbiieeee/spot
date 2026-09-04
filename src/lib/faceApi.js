@@ -65,7 +65,12 @@ export async function verifyFaceWithApi(candidateDataUrl, referenceImageUrl) {
       .withFaceDescriptor();
 
     if (!candidateDetection || !referenceDetection) {
-      return { success: false, score: 0, reason: 'No face detected in one of the images' };
+      return {
+        success: false,
+        compared: false,
+        score: null,
+        reason: !candidateDetection ? 'No face detected in the captured image' : 'No face detected in the enrolled image'
+      };
     }
 
     const distance = faceapi.euclideanDistance(candidateDetection.descriptor, referenceDetection.descriptor);
@@ -74,11 +79,31 @@ export async function verifyFaceWithApi(candidateDataUrl, referenceImageUrl) {
 
     return {
       success,
+      compared: true,
       score: Number(score.toFixed(3)),
       reason: success ? 'Face matched' : 'Face does not match',
     };
   } catch (error) {
     console.warn('Local face-api.js verification failed:', error);
+    return null;
+  }
+}
+
+export async function trackFaceWithApi(videoElement) {
+  try {
+    await loadModels();
+    const detection = await faceapi
+      .detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
+      .withFaceLandmarks();
+
+    if (!detection) return null;
+
+    return {
+      box: detection.detection.box,
+      points: detection.landmarks.positions.map(({ x, y }) => ({ x, y })),
+    };
+  } catch (error) {
+    console.warn('Live face landmark tracking unavailable:', error);
     return null;
   }
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import GlobalSearchModal from './GlobalSearchModal';
@@ -38,16 +38,25 @@ export default function Layout({ children, title, subtitle, actions }) {
     checkpoints,
     sidebarCollapsed,
     toggleSidebar,
+    syncProgress,
   } = useSpot();
 
   const { profile } = useAuth();
   const navigate = useNavigate();
   const [now, setNow] = useState(() => new Date());
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [readNotifIds, setReadNotifIds] = useState(() => new Set());
+  const readNotificationsKey = `spot-read-notifications-${profile?.uid || profile?.email || 'guest'}`;
+  const [readNotifIds, setReadNotifIds] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(readNotificationsKey) || '[]'));
+    } catch {
+      return new Set();
+    }
+  });
   const [notifFilter, setNotifFilter] = useState('ALL');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const location = useLocation();
+  const shellRef = useRef(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -68,6 +77,36 @@ export default function Layout({ children, title, subtitle, actions }) {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [notificationsOpen]);
+
+  useEffect(() => {
+    localStorage.setItem(readNotificationsKey, JSON.stringify([...readNotifIds]));
+  }, [readNotifIds, readNotificationsKey]);
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    let frameId;
+    const updatePointerField = (event) => {
+      cancelAnimationFrame(frameId);
+      frameId = requestAnimationFrame(() => {
+        shell.style.setProperty('--pointer-x', `${(event.clientX / window.innerWidth) * 100}%`);
+        shell.style.setProperty('--pointer-y', `${(event.clientY / window.innerHeight) * 100}%`);
+      });
+    };
+    const resetPointerField = () => {
+      shell.style.setProperty('--pointer-x', '50%');
+      shell.style.setProperty('--pointer-y', '35%');
+    };
+
+    window.addEventListener('pointermove', updatePointerField, { passive: true });
+    window.addEventListener('pointerleave', resetPointerField);
+    return () => {
+      cancelAnimationFrame(frameId);
+      window.removeEventListener('pointermove', updatePointerField);
+      window.removeEventListener('pointerleave', resetPointerField);
+    };
+  }, []);
 
   const realNotifications = [
     ...incidents.map((inc) => ({
@@ -155,7 +194,7 @@ export default function Layout({ children, title, subtitle, actions }) {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden text-slate-100 select-none"
+    <div ref={shellRef} className="command-shell relative flex h-screen w-screen overflow-hidden text-slate-100 select-none"
       style={{ background: 'var(--color-bg-base)' }}>
 
       {/* ── Mobile sidebar backdrop ── */}
@@ -188,6 +227,11 @@ export default function Layout({ children, title, subtitle, actions }) {
             borderBottom: '1px solid rgba(36, 51, 84, 0.7)',
           }}
         >
+          {syncProgress < 100 && (
+            <div className="sync-progress absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-slate-800/80" aria-label={`Synchronizing ${syncProgress}%`}>
+              <div className="sync-progress-fill h-full bg-gradient-to-r from-cyan-400 via-blue-500 to-emerald-400 transition-[width] duration-500" style={{ width: `${syncProgress}%` }} />
+            </div>
+          )}
           {/* Left: Hamburger (mobile) + Breadcrumbs */}
           <div className="flex items-center gap-3 min-w-0">
             {/* Mobile hamburger */}
@@ -253,8 +297,8 @@ export default function Layout({ children, title, subtitle, actions }) {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
                   <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                 </span>
-                <span className="font-bold text-emerald-400 text-[11px] tracking-wide">
-                  {dbConnected ? 'HQ SYNCED' : 'ONLINE'}
+                <span className={`font-bold text-[11px] tracking-wide ${syncProgress < 100 ? 'text-cyan-400' : 'text-emerald-400'}`}>
+                  {syncProgress < 100 ? `SYNCING ${syncProgress}%` : (dbConnected ? 'HQ SYNCED' : 'ONLINE')}
                 </span>
               </div>
             </div>
@@ -411,7 +455,9 @@ export default function Layout({ children, title, subtitle, actions }) {
 
         {/* ── Page Content ── */}
         <main className="custom-scrollbar flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-          {children}
+          <div key={location.pathname} className="page-transition">
+            {children}
+          </div>
         </main>
       </div>
 
