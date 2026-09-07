@@ -1,16 +1,17 @@
-import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadString } from 'firebase/storage';
 import { db, auth, hasFirebaseConfig, storage } from './firebase';
 
 const noop = () => {};
 
-export function subscribeCollection(name, cb, onError = () => {}) {
+export function subscribeCollection(name, cb, onError = () => {}, constraints = []) {
   if (!hasFirebaseConfig) {
     cb([]);
     return noop;
   }
 
-  return onSnapshot(collection(db, name), (snap) => {
+  const source = constraints.length ? query(collection(db, name), ...constraints) : collection(db, name);
+  return onSnapshot(source, (snap) => {
     cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }, onError);
 }

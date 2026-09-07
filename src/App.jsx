@@ -9,6 +9,7 @@ import Sites from './pages/Sites';
 import Clients from './pages/Clients';
 import PatrolOperations from './pages/Routes';
 import Schedules from './pages/Schedules';
+import ClientSchedules from './pages/ClientSchedules';
 import AdminLogs from './pages/AdminLogs';
 import Incidents from './pages/Incidents';
 import GuardTracking from './pages/GuardTracking';
@@ -24,6 +25,15 @@ import Checkpoints from './pages/Checkpoints';
 function RoleRoute({ allowedRoles, children }) {
   const { role } = useAuth();
   return allowedRoles.includes(role) ? children : <Navigate to={role === 'client' ? '/client' : '/'} replace />;
+}
+
+class ClientRouteBoundary extends React.Component {
+  state = { error: null };
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) return <div className="flex min-h-screen items-center justify-center bg-[#0F172A] p-6 text-center"><div className="card-spot max-w-md"><h1 className="text-lg font-bold text-white">Client workspace could not load</h1><p className="mt-2 text-sm text-slate-400">Refresh the page or sign in again. Your client data has not been changed.</p><button className="btn-primary mt-5" onClick={() => window.location.reload()}>Reload workspace</button></div></div>;
+    return this.props.children;
+  }
 }
 
 const STAFF_ROLES = ['superadmin', 'admin'];
@@ -47,11 +57,11 @@ export default function App() {
   if (role === 'client') {
     return (
       <SpotProvider>
-        <Routes>
+        <ClientRouteBoundary><Routes>
           <Route path="/client" element={<ClientPortal />} />
-          <Route path="/client/schedules" element={<Schedules />} />
+          <Route path="/client/schedules" element={<ClientSchedules />} />
           <Route path="*" element={<Navigate to="/client" replace />} />
-        </Routes>
+        </Routes></ClientRouteBoundary>
       </SpotProvider>
     );
   }

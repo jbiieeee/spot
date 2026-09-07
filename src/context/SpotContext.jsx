@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import { where } from 'firebase/firestore';
 import { db, hasFirebaseConfig } from '../lib/firebase';
 import { subscribeCollection, updateItem, addItem, removeItem, setItem, uploadDataUrl } from '../lib/dataSource';
 import { useAuth } from './AuthContext';
@@ -29,7 +30,7 @@ function playChime() {
 }
 
 export function SpotProvider({ children }) {
-  const { profile } = useAuth();
+  const { profile, role } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Pure Database State (Starts completely empty for fresh sync)
@@ -94,9 +95,15 @@ export function SpotProvider({ children }) {
   // -------------------------------------------------------------
   useEffect(() => {
     if (!hasFirebaseConfig || !db) return;
+    const isClient = role === 'client';
+    const clientScope = isClient && profile?.clientId ? [where('clientId', '==', profile.clientId)] : [];
+    const subscribeForRole = (name, callback, options = {}) => {
+      if (isClient && options.staffOnly) return () => {};
+      return subscribeCollection(name, callback, () => {}, clientScope);
+    };
 
     // 1. Incidents
-    const unsubIncidents = subscribeCollection('incidents', (fsIncidents) => {
+    const unsubIncidents = subscribeForRole('incidents', (fsIncidents) => {
       const formatted = (fsIncidents || []).map((doc) => ({
         id: doc.id,
         title: doc.title || doc.type || 'Field Incident',
@@ -127,12 +134,13 @@ export function SpotProvider({ children }) {
       setSites(all);
     };
 
-    const unsubSites = subscribeCollection('sites', (fsSites) => {
+    const unsubSites = subscribeForRole('sites', (fsSites) => {
       webSites = (fsSites || []).map((doc) => ({
         id: doc.id,
         name: doc.name || doc.siteName || 'Managed Site',
         type: doc.type || 'Commercial',
         client: doc.client || 'Client',
+        clientId: doc.clientId || '',
         address: doc.address || doc.location || 'Address',
         activeGuardsCount: doc.activeGuardsCount || 0,
         checkpointsCount: doc.checkpointsCount || 0,
@@ -146,12 +154,13 @@ export function SpotProvider({ children }) {
       mergeSites();
     });
 
-    const unsubClientSites = subscribeCollection('client_sites', (fsSites) => {
+    const unsubClientSites = subscribeForRole('client_sites', (fsSites) => {
       androidSites = (fsSites || []).map((doc) => ({
         id: doc.id,
         name: doc.siteName || doc.name || 'Managed Site',
         type: doc.type || 'Commercial',
         client: doc.client || 'Client',
+        clientId: doc.clientId || '',
         address: doc.address || doc.location || 'Address',
         activeGuardsCount: doc.activeGuardsCount || 0,
         checkpointsCount: doc.checkpointsCount || 0,
@@ -165,7 +174,7 @@ export function SpotProvider({ children }) {
       mergeSites();
     });
 
-    const unsubCheckpoints = subscribeCollection('checkpoints', (fsCheckpoints) => {
+    const unsubCheckpoints = subscribeForRole('checkpoints', (fsCheckpoints) => {
       const normalized = (fsCheckpoints || []).map((checkpoint) => ({
         ...checkpoint,
         id: checkpoint.id,
@@ -183,7 +192,7 @@ export function SpotProvider({ children }) {
     });
 
     // 3. Guards / Users
-    const unsubUsers = subscribeCollection('users', (fsUsers) => {
+    const unsubUsers = subscribeForRole('users', (fsUsers) => {
       const formatted = (fsUsers || [])
         .filter((u) => u.role === 'guard' || u.role === 'Guard' || !u.role)
         .map((u) => ({
@@ -191,6 +200,7 @@ export function SpotProvider({ children }) {
           name: u.name || u.displayName || u.email || 'Guard Personnel',
           photo: u.photo || u.photoUrl || '',
           client: u.client || 'Client',
+          clientId: u.clientId || '',
           siteId: u.siteId || 'SITE-01',
           siteName: u.siteName || 'Assigned Site',
           shift: u.shift || 'Day Shift',
@@ -264,7 +274,7 @@ export function SpotProvider({ children }) {
       setGuards(formatted);
     });
 
-    const unsubGuardLocations = subscribeCollection('guardLocations', (fsLocations) => {
+    const unsubGuardLocations = subscribeForRole('guardLocations', (fsLocations) => {
       const latestByGuard = {};
       (fsLocations || []).forEach((location) => {
         const guardId = location.guardId || location.userId;
@@ -304,6 +314,7 @@ export function SpotProvider({ children }) {
       id: doc.id,
       guardId: doc.guardId || 'N/A',
       guardName: doc.guardName || 'Guard',
+      clientId: doc.clientId || '',
       guardPhoto: doc.guardPhoto || '',
       siteName: doc.siteName || 'Site',
       routeName: doc.routeName || doc.routeId || 'Patrol Route',
@@ -317,20 +328,20 @@ export function SpotProvider({ children }) {
       checkpoints: doc.checkpoints || []
     });
 
-    const unsubPatrols = subscribeCollection('patrolLogs', (fsLogs) => {
+    const unsubPatrols = subscribeForRole('patrolLogs', (fsLogs) => {
       webPatrols = (fsLogs || []).map(mapPatrolDoc);
       mergePatrols();
     });
 
-    const unsubPatrolSchedules = subscribeCollection('patrol_schedules', (fsLogs) => {
+    const unsubPatrolSchedules = subscribeForRole('patrol_schedules', (fsLogs) => {
       androidPatrols = (fsLogs || []).map(mapPatrolDoc);
       mergePatrols();
     });
 
-    const unsubSchedules = subscribeCollection('schedules', (fsSchedules) => setSchedules((fsSchedules || []).map((schedule) => ({ id: schedule.id, guardId: schedule.guardId || '', guardName: schedule.guardName || 'Guard', siteId: schedule.siteId || '', siteName: schedule.siteName || 'Site', shift: schedule.shift || 'Day Shift', date: schedule.date || '', status: schedule.status || 'Scheduled', clientId: schedule.clientId || '' }))));
+    const unsubSchedules = subscribeForRole('schedules', (fsSchedules) => setSchedules((fsSchedules || []).map((schedule) => ({ id: schedule.id, guardId: schedule.guardId || '', guardName: schedule.guardName || 'Guard', siteId: schedule.siteId || '', siteName: schedule.siteName || 'Site', shift: schedule.shift || 'Day Shift', date: schedule.date || '', status: schedule.status || 'Scheduled', clientId: schedule.clientId || '' }))));
 
     // 5. Audit Logs
-    const unsubAudit = subscribeCollection('adminLogs', (fsAudit) => {
+    const unsubAudit = subscribeForRole('adminLogs', (fsAudit) => {
       const formatted = (fsAudit || []).map((doc) => ({
         id: doc.id,
         timestamp: doc.timestamp?.toDate ? doc.timestamp.toDate().toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Recently',
@@ -342,10 +353,10 @@ export function SpotProvider({ children }) {
         severity: doc.severity || 'Info'
       }));
       setAuditLogs(formatted);
-    });
+    }, { staffOnly: true });
 
     // 6. Clients
-    const unsubClients = subscribeCollection('clients', (fsClients) => {
+    const unsubClients = subscribeForRole('clients', (fsClients) => {
       const formatted = (fsClients || []).map((doc) => ({
         id: doc.id,
         company: doc.company || doc.name || 'Client Organization',
@@ -363,10 +374,10 @@ export function SpotProvider({ children }) {
         notes: doc.notes || ''
       }));
       setClients(formatted);
-    });
+    }, { staffOnly: true });
 
     // 7. Devices
-    const unsubDevices = subscribeCollection('devices', (fsDevices) => {
+    const unsubDevices = subscribeForRole('devices', (fsDevices) => {
       const formatted = (fsDevices || []).map((d) => ({
         id: d.id,
         deviceId: d.deviceId || d.id,
@@ -375,10 +386,10 @@ export function SpotProvider({ children }) {
         lastActive: d.lastActive?.toDate ? d.lastActive.toDate() : null,
       }));
       setDevices(formatted);
-    });
+    }, { staffOnly: true });
 
     // 8. Attendance (from Android app)
-    const unsubAttendance = subscribeCollection('attendance', (fsDocs) => {
+    const unsubAttendance = subscribeForRole('attendance', (fsDocs) => {
       const formatted = (fsDocs || []).map((doc) => ({
         id: doc.id,
         guardId: doc.guardId || doc.userId || '',
@@ -392,10 +403,10 @@ export function SpotProvider({ children }) {
         faceVerified: Boolean(doc.faceVerified),
       }));
       setAttendance(formatted);
-    });
+    }, { staffOnly: true });
 
     // 9. Checkpoint logs (from Android app)
-    const unsubCheckpointLogs = subscribeCollection('checkpoint_logs', (fsDocs) => {
+    const unsubCheckpointLogs = subscribeForRole('checkpoint_logs', (fsDocs) => {
       const formatted = (fsDocs || []).map((doc) => ({
         id: doc.id,
         guardId: doc.guardId || '',
@@ -428,7 +439,7 @@ export function SpotProvider({ children }) {
       unsubAttendance();
       unsubCheckpointLogs();
     };
-  }, []);
+  }, [profile?.clientId, role]);
 
   useEffect(() => {
     const incidentEvents = incidents.map((incident) => ({
