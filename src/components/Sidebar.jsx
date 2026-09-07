@@ -20,32 +20,57 @@ import {
   LogOut,
   Smartphone,
   ScanFace
+  ,QrCode
 } from 'lucide-react';
 import { useSpot } from '../context/SpotContext';
 import { useAuth } from '../context/AuthContext';
 
 export default function Sidebar() {
   const { sidebarCollapsed, toggleSidebar } = useSpot();
-  const { logout, profile } = useAuth();
+  const { logout, profile, role } = useAuth();
   const location = useLocation();
 
-  const navItems = [
-    { label: 'Dashboard', path: '/', icon: LayoutDashboard },
-    { label: 'Live Monitoring', path: '/tracking', icon: Radio, badge: 'LIVE' },
-    { label: 'Patrol Operations', path: '/routes', icon: ShieldAlert },
-    { label: 'Guards', path: '/guards', icon: Users },
-    { label: 'Face Enrollment', path: '/face-verify', icon: ScanFace },
-    { label: 'Devices', path: '/devices', icon: Smartphone },
-    { label: 'Deployment Sites', path: '/sites', icon: Building2 },
-    { label: 'Clients', path: '/clients', icon: Briefcase },
-    { label: 'Schedules', path: '/schedules', icon: CalendarDays },
-    { label: 'Incidents', path: '/incidents', icon: AlertTriangle, badgeColor: 'bg-rose-500/20 text-rose-400' },
-    { label: 'Analytics', path: '/analytics', icon: BarChart3 },
-    { label: 'Reports', path: '/reports', icon: FileSpreadsheet },
-    { label: 'Audit Logs', path: '/logs', icon: History },
-    { label: 'Settings', path: '/settings', icon: Settings },
-    { label: 'Profile', path: '/profile', icon: UserCheck }
-  ];
+  const navigationGroups = role === 'client'
+    ? [
+        { label: 'Client Workspace', items: [
+          { label: 'Operations Overview', path: '/client', icon: Building2 },
+          { label: 'Guard Schedules', path: '/client/schedules', icon: CalendarDays }
+        ] },
+        { label: 'Account', items: [{ label: 'Profile', path: '/profile', icon: UserCheck }] }
+      ]
+    : [
+        { label: 'Command', items: [
+          { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+          { label: 'Live Monitoring', path: '/tracking', icon: Radio, badge: 'LIVE' }
+        ] },
+        { label: 'Field Operations', items: [
+          { label: 'Patrol Operations', path: '/routes', icon: ShieldAlert },
+          { label: 'Schedules', path: '/schedules', icon: CalendarDays },
+          { label: 'Incidents', path: '/incidents', icon: AlertTriangle, badgeColor: 'bg-rose-500/20 text-rose-400' }
+        ] },
+        { label: 'People & Access', items: [
+          { label: 'Guards', path: '/guards', icon: Users },
+          { label: 'Face Enrollment', path: '/face-verify', icon: ScanFace },
+          { label: 'Devices', path: '/devices', icon: Smartphone }
+        ] },
+        { label: 'Sites & Clients', items: [
+          { label: 'Deployment Sites', path: '/sites', icon: Building2 },
+          { label: 'QR Checkpoints', path: '/checkpoints', icon: QrCode, roles: ['superadmin', 'admin'] },
+          { label: 'Clients', path: '/clients', icon: Briefcase, roles: ['superadmin', 'admin'] }
+        ] },
+        { label: 'Intelligence', items: [
+          { label: 'Analytics', path: '/analytics', icon: BarChart3 },
+          { label: 'Reports', path: '/reports', icon: FileSpreadsheet }
+        ] },
+        { label: 'Administration', items: [
+          { label: 'Audit Logs', path: '/logs', icon: History, roles: ['superadmin'] },
+          { label: 'Settings', path: '/settings', icon: Settings, roles: ['superadmin'] },
+          { label: 'Profile', path: '/profile', icon: UserCheck }
+        ] }
+      ].map((group) => ({
+        ...group,
+        items: group.items.filter((item) => !item.roles || item.roles.includes(role))
+      })).filter((group) => group.items.length > 0);
 
   return (
     <aside
@@ -90,8 +115,12 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation List */}
-      <nav className="custom-scrollbar flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        {navItems.map((item) => {
+      <nav className="custom-scrollbar flex-1 overflow-y-auto px-3 py-4">
+        {navigationGroups.map((group) => (
+          <div key={group.label} className="mb-5 last:mb-0">
+            {!sidebarCollapsed && <div className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">{group.label}</div>}
+            <div className="space-y-1">
+              {group.items.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.path;
 
@@ -129,7 +158,10 @@ export default function Sidebar() {
               )}
             </NavLink>
           );
-        })}
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* Sidebar Footer / Supervisor Profile */}

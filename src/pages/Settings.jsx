@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import Layout from "../components/Layout";
 import { useSpot } from "../context/SpotContext";
+import { useAuth } from "../context/AuthContext";
 import {
   Settings,
   Shield,
@@ -45,8 +46,7 @@ function StatCard({ icon: Icon, title, value, max, unit, percent, accent, highli
       }}
     >
       <div className="flex items-center justify-between mb-2">
-        <div
-          className="flex items-center gap-2 text-xs font-semibold"
+        <div className="flex items-center gap-2 text-xs font-semibold"
           style={{ color: highlight ? "#1a1a1a" : "#94a3b8" }}
         >
           <Icon className="h-4 w-4" />
@@ -242,6 +242,45 @@ function DiagnosticsTab() {
         ))}
       </div>
     </div>
+  );
+}
+
+function AccountAccessTab() {
+  const { createManagedAccount } = useAuth();
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'admin', clientId: '', company: '' });
+  const [status, setStatus] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const submit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setStatus('');
+    try {
+      await createManagedAccount(form);
+      setStatus('Account created. The user can sign in with the credentials provided.');
+      setForm({ name: '', email: '', password: '', role: 'admin', clientId: '', company: '' });
+    } catch (error) {
+      setStatus(error.message || 'Account creation failed.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-5 rounded-[20px] border border-slate-800/80 bg-[#1E293B] p-5">
+      <div><h3 className="text-sm font-bold text-white">Create managed account</h3><p className="mt-1 text-xs text-slate-400">Only SuperAdmins can provision platform access. Client accounts must reference their client record ID.</p></div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <input required className="input-spot" value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="Full name" />
+        <select className="input-spot" value={form.role} onChange={(e) => update('role', e.target.value)}><option value="admin">Admin</option><option value="client">Client</option><option value="superadmin">SuperAdmin</option></select>
+        <input required type="email" className="input-spot" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="Email address" />
+        <input required minLength={6} type="password" className="input-spot" value={form.password} onChange={(e) => update('password', e.target.value)} placeholder="Temporary password" />
+        <input className="input-spot" value={form.company} onChange={(e) => update('company', e.target.value)} placeholder="Company / agency" />
+        <input className="input-spot" value={form.clientId} onChange={(e) => update('clientId', e.target.value)} placeholder="Client record ID (for Client)" />
+      </div>
+      {status && <p className={`rounded-lg border p-3 text-xs ${status.startsWith('Account created') ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-300'}`}>{status}</p>}
+      <div className="flex justify-end"><button disabled={saving} className="btn-primary" type="submit"><Users className="h-4 w-4" />{saving ? 'Creating...' : 'Create account'}</button></div>
+    </form>
   );
 }
 

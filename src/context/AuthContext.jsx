@@ -7,15 +7,34 @@ import {
   reauthenticateWithCredential,
   setPersistence,
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut,
   updatePassword,
   updateProfile
+  ,getIdTokenResult
 } from 'firebase/auth';
+import { httpsCallable } from 'firebase/functions';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { auth, db, hasFirebaseConfig } from '../lib/firebase';
+import { auth, db, functions, hasFirebaseConfig, createIsolatedAuth } from '../lib/firebase';
 
 const AuthContext = createContext(null);
 const LOCAL_AUTH_KEY = 'spot.local.session';
+
+export const ROLES = Object.freeze({
+  SUPER_ADMIN: 'superadmin',
+  ADMIN: 'admin',
+  CLIENT: 'client',
+  GUARD: 'guard'
+});
+
+export function normalizeRole(role) {
+  const value = String(role || '').trim().toLowerCase();
+  if (value === 'supervisor' || value === 'supervisor command officer' || value === 'super admin') {
+    return ROLES.SUPER_ADMIN;
+  }
+  if (Object.values(ROLES).includes(value)) return value;
+  return value || ROLES.GUARD;
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -30,19 +49,21 @@ export function AuthProvider({ children }) {
         setUser(u);
         if (u) {
           try {
+            const token = await getIdTokenResult(u, true);
+            const claims = token.claims || {};
             if (db) {
               const snap = await getDoc(doc(db, 'users', u.uid));
               const profileData = snap.exists() ? snap.data() : {};
-              const normalizedRole = String(profileData.role || 'supervisor').trim().toLowerCase();
+              const normalizedRole = normalizeRole(profileData.role || claims.role);
               setProfile(snap.exists()
-                ? { id: u.uid, ...profileData, role: normalizedRole }
-                : { id: u.uid, role: 'supervisor', name: u.displayName || u.email, agency: 'S.P.O.T Command HQ', phone: '' }
+                ? { id: u.uid, ...profileData, role: normalizedRole, clientId: profileData.clientId || claims.clientId || '' }
+                : { id: u.uid, role: normalizedRole, clientId: claims.clientId || '', name: u.displayName || u.email, agency: '', phone: '' }
               );
             } else {
-              setProfile({ id: u.uid, role: 'supervisor', name: u.displayName || u.email, agency: 'S.P.O.T Command HQ', phone: '' });
+              setProfile({ id: u.uid, role: normalizeRole(claims.role), clientId: claims.clientId || '', name: u.displayName || u.email, agency: '', phone: '' });
             }
           } catch {
-            setProfile({ id: u.uid, role: 'supervisor', name: u.displayName || u.email, agency: 'S.P.O.T Command HQ', phone: '' });
+            setProfile({ id: u.uid, role: ROLES.GUARD, name: u.displayName || u.email, agency: '', phone: '' });
           }
         } else {
           setProfile(null);
@@ -81,7 +102,7 @@ export function AuthProvider({ children }) {
         id: uid,
         name: trimmedEmail.split('@')[0].toUpperCase(),
         email: trimmedEmail,
-        role: 'supervisor',
+        role: ROLES.SUPER_ADMIN,
         agency: 'S.P.O.T Command HQ',
         phone: '+63 917 555 0100'
       };
@@ -109,7 +130,7 @@ export function AuthProvider({ children }) {
     const trimmedName = name?.trim();
     if (!trimmedName) throw new Error('Display name is required.');
 
-    const normalizedRole = String(role || profile?.role || 'supervisor').trim().toLowerCase();
+    const normalizedRole = normalizeRole(role || profile?.role);
     const patch = {
       name: trimmedName,
       role: normalizedRole,
@@ -133,6 +154,8 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const hasRole = (...roles) => roles.map(normalizeRole).includes(normalizeRole(profile?.role));
+
   const changePassword = async ({ currentPassword, newPassword }) => {
     if (!user?.email) throw new Error('No active user session.');
     if (!currentPassword || !newPassword) throw new Error('Current and new password are required.');
@@ -145,6 +168,47 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const createManagedAccount = async (account) => {
+    if (!hasFirebaseConfig || !functions) {
+      throw new Error('Firebase Functions are required to create managed accounts.');
+    }
+    const payload = { ...account, role: normalizeRole(account.role) };
+    try {
+      const createAccount = httpsCallable(functions, 'createManagedAccount');
+      const result = await createAccount(payload);
+      return result.data;
+    } catch (error) {
+      if (!['functions/not-found', 'functions/unavailable', 'functions/internal'].includes(error.code)) throw error;
+      const isolated = createIsolatedAuth();
+      try {
+        const result = await createUserWithEmailAndPassword(isolated.auth, payload.email, payload.password);
+        const profileData = {
+          id: result.user.uid,
+          email: payload.email,
+          name: payload.name,
+          displayName: payload.name,
+          role: payload.role,
+          clientId: payload.clientId || '',
+          company: payload.company || '',
+          phone: payload.phone || '',
+          contractEnd: payload.contractEnd || '',
+          status: 'Active',
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'users', result.user.uid), profileData);
+        return { uid: result.user.uid, email: payload.email, role: payload.role, clientId: payload.clientId || '' };
+      } finally {
+        await isolated.dispose();
+      }
+    }
+  };
+
+  const setManagedPassword = async (uid, password) => {
+    if (!hasFirebaseConfig || !functions) throw new Error('Firebase Functions are required to change managed passwords.');
+    const result = await httpsCallable(functions, 'setManagedPassword')({ uid, password });
+    return result.data;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -155,6 +219,10 @@ export function AuthProvider({ children }) {
         logout,
         updateAccountProfile,
         changePassword,
+        createManagedAccount,
+        setManagedPassword,
+        hasRole,
+        role: normalizeRole(profile?.role),
         configError
       }}
     >

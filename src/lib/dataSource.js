@@ -4,7 +4,7 @@ import { db, auth, hasFirebaseConfig, storage } from './firebase';
 
 const noop = () => {};
 
-export function subscribeCollection(name, cb) {
+export function subscribeCollection(name, cb, onError = () => {}) {
   if (!hasFirebaseConfig) {
     cb([]);
     return noop;
@@ -12,7 +12,7 @@ export function subscribeCollection(name, cb) {
 
   return onSnapshot(collection(db, name), (snap) => {
     cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
+  }, onError);
 }
 
 function logAdminAction(action, collectionName, targetId, details = {}) {

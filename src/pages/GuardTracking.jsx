@@ -35,10 +35,15 @@ export default function GuardTracking() {
   const { guards, patrols, addToast, openGuardDrawer } = useSpot();
   const [selectedGuardId, setSelectedGuardId] = useState('G-101');
 
-  const activeGuard = guards.find((g) => g.id === selectedGuardId) || guards[0];
-  const activePatrol = patrols.find((p) => p.guardId === activeGuard.id) || patrols[0];
+  const activeGuard = guards.find((g) => g.id === selectedGuardId) || guards[0] || {
+    id: '--', name: 'Waiting for telemetry', siteName: 'No active site', status: 'Offline',
+    gpsLat: 14.5547, gpsLng: 121.0244, gpsAccuracy: 'Unknown', networkSignal: 'Offline',
+    battery: 0, faceVerifiedAt: 'Pending', shift: 'Unassigned', stepCount: 0,
+    distanceWalkedMeters: 0, photo: ''
+  };
+  const activePatrol = activeGuard ? patrols.find((p) => p.guardId === activeGuard.id) || patrols[0] : null;
 
-  const mapCenter = [activeGuard.gpsLat, activeGuard.gpsLng];
+  const mapCenter = activeGuard ? [activeGuard.gpsLat, activeGuard.gpsLng] : [14.5547, 121.0244];
 
   return (
     <Layout
@@ -53,7 +58,7 @@ export default function GuardTracking() {
               key={guard.id}
               onClick={() => setSelectedGuardId(guard.id)}
               className={`flex items-center gap-3 rounded-2xl border px-4 py-2.5 transition shrink-0 ${
-                guard.id === activeGuard.id
+                guard.id === activeGuard?.id
                   ? 'border-blue-500 bg-blue-600/20 text-white shadow-lg shadow-blue-600/20'
                   : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-white'
               }`}
@@ -143,7 +148,7 @@ export default function GuardTracking() {
                 <Radio className="h-4 w-4 text-emerald-400 animate-pulse" />
                 <span className="text-xs font-bold text-white">Live Tracking: {activeGuard.name}</span>
               </div>
-              <span className="text-[10px] font-mono text-slate-400">GPS Lock: 1.2m Accuracy</span>
+              <span className="text-[10px] font-mono text-slate-400">GPS Lock: {activeGuard.gpsAccuracy} · {activeGuard.networkSignal}</span>
             </div>
 
             <div className="flex-1 w-full h-full relative">
@@ -232,6 +237,14 @@ export default function GuardTracking() {
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Shift:</span>
                   <span className="font-semibold text-slate-200">{activeGuard.shift}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="rounded-xl border border-white/10 bg-slate-950/35 p-2"><div className="text-[10px] text-slate-500">Steps today</div><div className="mt-1 text-sm font-bold text-cyan-300">{Number(activeGuard.stepCount || 0).toLocaleString()}</div></div>
+                  <div className="rounded-xl border border-white/10 bg-slate-950/35 p-2"><div className="text-[10px] text-slate-500">Distance</div><div className="mt-1 text-sm font-bold text-emerald-300">{(Number(activeGuard.distanceWalkedMeters || 0) / 1000).toFixed(2)} km</div></div>
+                </div>
+                <div className="text-[10px] text-slate-500">Last location update: {activeGuard.lastLocationUpdate?.toDate ? activeGuard.lastLocationUpdate.toDate().toLocaleTimeString() : activeGuard.lastLocationUpdate || 'Awaiting sync'}</div>
+                <div className="rounded-xl border border-cyan-400/15 bg-cyan-400/5 p-2 font-mono text-[10px] text-cyan-200">
+                  Live coordinates: {Number(activeGuard.gpsLat).toFixed(6)}, {Number(activeGuard.gpsLng).toFixed(6)}
                 </div>
               </div>
             </div>

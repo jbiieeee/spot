@@ -18,9 +18,18 @@ import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import Devices from './pages/Devices';
 import FaceVerify from './pages/FaceVerify';
+import ClientPortal from './pages/ClientPortal';
+import Checkpoints from './pages/Checkpoints';
+
+function RoleRoute({ allowedRoles, children }) {
+  const { role } = useAuth();
+  return allowedRoles.includes(role) ? children : <Navigate to={role === 'client' ? '/client' : '/'} replace />;
+}
+
+const STAFF_ROLES = ['superadmin', 'admin'];
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, role } = useAuth();
 
   if (loading) {
     return (
@@ -35,24 +44,38 @@ export default function App() {
 
   if (!user) return <Login />;
 
+  if (role === 'client') {
+    return (
+      <SpotProvider>
+        <Routes>
+          <Route path="/client" element={<ClientPortal />} />
+          <Route path="/client/schedules" element={<Schedules />} />
+          <Route path="*" element={<Navigate to="/client" replace />} />
+        </Routes>
+      </SpotProvider>
+    );
+  }
+
   return (
     <SpotProvider>
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/tracking" element={<GuardTracking />} />
-        <Route path="/routes" element={<PatrolOperations />} />
-        <Route path="/guards" element={<Guards />} />
-        <Route path="/face-verify" element={<FaceVerify />} />
-        <Route path="/sites" element={<Sites />} />
-        <Route path="/clients" element={<Clients />} />
-        <Route path="/schedules" element={<Schedules />} />
-        <Route path="/incidents" element={<Incidents />} />
-        <Route path="/analytics" element={<Analytics />} />
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/logs" element={<AdminLogs />} />
+        <Route path="/tracking" element={<RoleRoute allowedRoles={STAFF_ROLES}><GuardTracking /></RoleRoute>} />
+        <Route path="/routes" element={<RoleRoute allowedRoles={STAFF_ROLES}><PatrolOperations /></RoleRoute>} />
+        <Route path="/guards" element={<RoleRoute allowedRoles={STAFF_ROLES}><Guards /></RoleRoute>} />
+        <Route path="/face-verify" element={<RoleRoute allowedRoles={STAFF_ROLES}><FaceVerify /></RoleRoute>} />
+        <Route path="/sites" element={<RoleRoute allowedRoles={STAFF_ROLES}><Sites /></RoleRoute>} />
+        <Route path="/checkpoints" element={<RoleRoute allowedRoles={['superadmin', 'admin']}><Checkpoints /></RoleRoute>} />
+        <Route path="/clients" element={<RoleRoute allowedRoles={['superadmin', 'admin']}><Clients /></RoleRoute>} />
+        <Route path="/schedules" element={<RoleRoute allowedRoles={STAFF_ROLES}><Schedules /></RoleRoute>} />
+        <Route path="/incidents" element={<RoleRoute allowedRoles={STAFF_ROLES}><Incidents /></RoleRoute>} />
+        <Route path="/analytics" element={<RoleRoute allowedRoles={STAFF_ROLES}><Analytics /></RoleRoute>} />
+        <Route path="/reports" element={<RoleRoute allowedRoles={STAFF_ROLES}><Reports /></RoleRoute>} />
+        <Route path="/logs" element={<RoleRoute allowedRoles={['superadmin']}><AdminLogs /></RoleRoute>} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/devices" element={<Devices />} />
+        <Route path="/settings" element={<RoleRoute allowedRoles={['superadmin']}><Settings /></RoleRoute>} />
+        <Route path="/devices" element={<RoleRoute allowedRoles={['superadmin', 'admin']}><Devices /></RoleRoute>} />
+        <Route path="/client" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </SpotProvider>

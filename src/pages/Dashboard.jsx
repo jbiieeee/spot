@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import { useSpot } from '../context/SpotContext';
-import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -40,10 +40,32 @@ const createGuardMarker = (status, initial) => {
   });
 };
 
+function LiveMapViewport({ guards, resetKey }) {
+  const map = useMap();
+  const positionKey = guards.map((guard) => `${guard.id}:${guard.gpsLat}:${guard.gpsLng}`).join('|');
+
+  useEffect(() => {
+    const points = guards
+      .filter((guard) => Number.isFinite(Number(guard.gpsLat)) && Number.isFinite(Number(guard.gpsLng)))
+      .map((guard) => [Number(guard.gpsLat), Number(guard.gpsLng)]);
+
+    if (points.length === 1) map.setView(points[0], 15, { animate: true, duration: 0.7 });
+    if (points.length > 1) map.fitBounds(points, { padding: [36, 36], maxZoom: 15, animate: true, duration: 0.7 });
+  }, [positionKey, resetKey, map]);
+
+  return null;
+}
+
 export default function Dashboard() {
   const { stats, guards, liveEvents, openGuardDrawer, addToast } = useSpot();
   const [timeFilter, setTimeFilter] = useState('Daily');
   const [activeTab, setActiveTab] = useState('All');
+  const [mapResetKey, setMapResetKey] = useState(0);
+
+  const visibleGuards = guards.filter((guard) => {
+    if (activeTab === 'All') return true;
+    return guard.status === activeTab;
+  });
 
   const topCards = [
     { title: 'Active Guards', count: stats.activeGuards, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
@@ -63,7 +85,7 @@ export default function Dashboard() {
       title="Security Operations Command Dashboard"
       subtitle="Real-time Guard Patrol Operations, GPS Telemetry & Live Telematics"
     >
-      <div className="space-y-6">
+      <div className="command-grid space-y-6">
         {/* Top 8 Statistics Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3.5">
           {topCards.map((card, idx) => {
@@ -88,7 +110,7 @@ export default function Dashboard() {
         {/* Center Live Map (~60% width) & Right Activity Feed (~40% width) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
           {/* Live Map Box */}
-          <div className="lg:col-span-7 xl:col-span-8 card-spot p-0 overflow-hidden flex flex-col min-h-[520px] relative border border-slate-800">
+          <div className="lg:col-span-7 xl:col-span-8 card-spot live-map-shell p-0 overflow-hidden flex flex-col min-h-[520px] relative border border-slate-800">
             {/* Map Top Bar Controls */}
             <div className="flex items-center justify-between border-b border-slate-800 bg-[#1E293B] px-5 py-3.5 z-10">
               <div className="flex items-center gap-2.5">
@@ -99,14 +121,15 @@ export default function Dashboard() {
                 <span className="text-sm font-bold text-white tracking-wide">
                   Live Global Operations Map
                 </span>
-                <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-400 border border-blue-500/30">
-                  {guards.length} Active Pins
-                </span>
+                <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-bold text-blue-400 border border-blue-500/30">{visibleGuards.length} Visible Pins</span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                {['All', 'On Patrol', 'Emergency'].map((filter) => (
+                  <button key={filter} onClick={() => setActiveTab(filter)} className={`hidden rounded-lg px-2 py-1 text-[10px] font-semibold transition sm:inline-flex ${activeTab === filter ? 'bg-blue-500/20 text-blue-200' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-200'}`}>{filter}</button>
+                ))}
                 <button
-                  onClick={() => addToast('Map View', 'Center reset to Metro Manila Command Sector', 'info')}
+                  onClick={() => { setMapResetKey((value) => value + 1); addToast('Map View', 'Live guard coverage recentered', 'info'); }}
                   className="btn-secondary py-1 px-3 text-xs"
                 >
                   <Maximize2 className="h-3.5 w-3.5 mr-1" /> Reset View
@@ -119,7 +142,7 @@ export default function Dashboard() {
               <MapContainer
                 center={mapCenter}
                 zoom={14}
-                scrollWheelZoom={false}
+                scrollWheelZoom={true}
                 className="w-full h-full z-0"
               >
                 <TileLayer
@@ -127,13 +150,16 @@ export default function Dashboard() {
                   url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
                 />
 
+                <LiveMapViewport guards={visibleGuards} resetKey={mapResetKey} />
+
                 {/* Guard Markers on Map */}
-                {guards.map((guard) => (
-                  <Marker
-                    key={guard.id}
-                    position={[guard.gpsLat, guard.gpsLng]}
-                    icon={createGuardMarker(guard.status, guard.name.charAt(0))}
-                  >
+                {visibleGuards.map((guard) => (
+                  <React.Fragment key={guard.id}>
+                    <Circle center={[guard.gpsLat, guard.gpsLng]} radius={Math.max(18, Number.parseFloat(guard.gpsAccuracy) || 25)} pathOptions={{ color: guard.status === 'Emergency' ? '#fb7185' : '#38bdf8', fillColor: guard.status === 'Emergency' ? '#fb7185' : '#38bdf8', fillOpacity: 0.08, weight: 1 }} />
+                    <Marker
+                      position={[guard.gpsLat, guard.gpsLng]}
+                      icon={createGuardMarker(guard.status, guard.name.charAt(0))}
+                    >
                     <Popup className="custom-popup">
                       <div className="p-1 min-w-[200px]">
                         <div className="flex items-center gap-2 border-b border-slate-700 pb-2 mb-2">
@@ -165,14 +191,15 @@ export default function Dashboard() {
                         </button>
                       </div>
                     </Popup>
-                  </Marker>
+                    </Marker>
+                  </React.Fragment>
                 ))}
               </MapContainer>
             </div>
           </div>
 
           {/* Right Activity Feed */}
-          <div className="lg:col-span-5 xl:col-span-4 card-spot flex flex-col min-h-[520px]">
+          <div className="lg:col-span-5 xl:col-span-4 card-spot flex h-[380px] min-h-0 flex-col sm:h-[440px] lg:h-[520px]">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-2">
                 <Activity className="h-5 w-5 text-blue-400" />
@@ -184,7 +211,7 @@ export default function Dashboard() {
             </div>
 
             {/* Event List Stream */}
-            <div className="custom-scrollbar flex-1 overflow-y-auto mt-4 space-y-3 pr-1">
+            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto mt-4 space-y-3 pr-1 overscroll-contain">
               {liveEvents.length === 0 ? (
                 <div className="py-12 text-center text-xs text-slate-500">
                   No live events recorded in database yet. Ready for fresh field events.

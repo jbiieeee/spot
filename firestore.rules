@@ -8,23 +8,27 @@ service cloud.firestore {
     // Helper: get the caller's user profile
     function userDoc()  { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
     function isAuthed() { return request.auth != null; }
-    function isSupervisor() {
+    function isSuperAdmin() {
       return isAuthed() && (
-        userDoc().data.role == 'admin' ||
+        userDoc().data.role == 'superadmin' ||
         userDoc().data.role == 'supervisor' ||
         userDoc().data.role == 'Supervisor Command Officer' ||
         userDoc().data.role == 'supervisor command officer'
       );
     }
+    function isAdmin() { return isAuthed() && userDoc().data.role == 'admin'; }
+    function isOperationsManager() { return isSuperAdmin() || isAdmin(); }
+    function isClient() { return isAuthed() && userDoc().data.role == 'client'; }
+    function ownsClient(resource) { return isClient() && resource.data.clientId == userDoc().data.clientId; }
     function isSelf(uid)    { return isAuthed() && request.auth.uid == uid; }
 
     // /users : supervisors manage all; a guard can read/update their own doc
     match /users/{uid} {
-      allow read:   if isAuthed() && (isSupervisor() || isSelf(uid));
-      allow create: if isSupervisor();
-      allow update: if isSupervisor() || (isSelf(uid) &&
+      allow read:   if isOperationsManager() || isSelf(uid) || (isClient() && resource.data.clientId == userDoc().data.clientId);
+      allow create: if isSuperAdmin();
+      allow update: if isSuperAdmin() || (isSelf(uid) &&
                        request.resource.data.role == resource.data.role);
-      allow delete: if isSupervisor();
+      allow delete: if isSuperAdmin();
     }
 
     // Devices — any authenticated user can register their phone on launch
@@ -32,83 +36,83 @@ service cloud.firestore {
     match /devices/{deviceId} {
       allow read: if isAuthed();
       allow create, update: if isAuthed();
-      allow delete: if isSupervisor();
+      allow delete: if isOperationsManager();
     }
 
     // Reference data — supervisors write, all authed users read
-    match /sites/{id}       { allow read: if isAuthed(); allow write: if isSupervisor(); }
-    match /client_sites/{id} { allow read: if isAuthed(); allow write: if isAuthed(); }
-    match /checkpoints/{id} { allow read: if isAuthed(); allow write: if isSupervisor(); }
-    match /routes/{id}      { allow read: if isAuthed(); allow write: if isSupervisor(); }
-    match /schedules/{id}   { allow read: if isAuthed(); allow write: if isSupervisor(); }
-    match /guard_schedules_template/{id} { allow read: if isAuthed(); allow write: if isSupervisor(); }
-    match /guardLocations/{id}  { allow read: if isSupervisor(); allow write: if isAuthed(); }
-    match /locationHistory/{id} { allow read: if isSupervisor(); allow write: if isAuthed(); }
-    match /approvalRequests/{id} { allow read, write: if isSupervisor(); }
+    match /sites/{id}       { allow read: if isOperationsManager() || ownsClient(resource); allow write: if isOperationsManager(); }
+    match /client_sites/{id} { allow read: if isOperationsManager() || ownsClient(resource); allow write: if isOperationsManager(); }
+    match /checkpoints/{id} { allow read: if isOperationsManager() || ownsClient(resource); allow write: if isOperationsManager(); }
+    match /routes/{id}      { allow read: if isOperationsManager() || ownsClient(resource); allow write: if isOperationsManager(); }
+    match /schedules/{id}   { allow read: if isOperationsManager() || ownsClient(resource); allow write: if isOperationsManager(); }
+    match /guard_schedules_template/{id} { allow read: if isOperationsManager(); allow write: if isOperationsManager(); }
+    match /guardLocations/{id}  { allow read: if isOperationsManager() || ownsClient(resource); allow write: if isAuthed(); }
+    match /locationHistory/{id} { allow read: if isOperationsManager() || ownsClient(resource); allow write: if isAuthed(); }
+    match /approvalRequests/{id} { allow read, write: if isOperationsManager(); }
     match /auditLogs/{id} {
-      allow read: if isSupervisor();
-      allow create: if isSupervisor();
+      allow read: if isSuperAdmin();
+      allow create: if isSuperAdmin();
       allow update, delete: if false;
     }
 
     // Patrol logs — guards create their own; supervisors read all
     match /patrolLogs/{id} {
-      allow read:   if isAuthed() && (isSupervisor() || resource.data.guardId == request.auth.uid);
+      allow read:   if isOperationsManager() || ownsClient(resource) || resource.data.guardId == request.auth.uid;
       allow create: if isAuthed() && request.resource.data.guardId == request.auth.uid;
-      allow update, delete: if isSupervisor();
+      allow update, delete: if isOperationsManager();
     }
 
     // Patrol schedules (Android app)
     match /patrol_schedules/{id} {
-      allow read:   if isAuthed();
+      allow read:   if isOperationsManager() || ownsClient(resource);
       allow create: if isAuthed();
-      allow update, delete: if isSupervisor();
+      allow update, delete: if isOperationsManager();
     }
 
     // Attendance records (Android face-verify login)
     match /attendance/{id} {
-      allow read:   if isAuthed() && (isSupervisor() || resource.data.guardId == request.auth.uid);
+      allow read:   if isOperationsManager() || ownsClient(resource) || resource.data.guardId == request.auth.uid;
       allow create: if isAuthed();
       allow update: if isAuthed();
-      allow delete: if isSupervisor();
+      allow delete: if isOperationsManager();
     }
 
     // Face enrollment profiles for guard app login/attendance verification.
     match /faceProfiles/{guardId} {
       allow read: if isAuthed() && (
-        isSupervisor() ||
+        isOperationsManager() ||
         isSelf(guardId) ||
         userDoc().data.guardId == guardId ||
         userDoc().data.id == guardId
       );
-      allow create, update, delete: if isSupervisor();
+      allow create, update, delete: if isOperationsManager();
     }
 
     // Checkpoint scan logs
     match /checkpoint_logs/{id} {
-      allow read:   if isAuthed() && (isSupervisor() || resource.data.guardId == request.auth.uid);
+      allow read:   if isOperationsManager() || ownsClient(resource) || resource.data.guardId == request.auth.uid;
       allow create: if isAuthed();
-      allow update, delete: if isSupervisor();
+      allow update, delete: if isOperationsManager();
     }
 
     // Reports
     match /reports/{id} {
       allow read:   if isAuthed();
       allow create: if isAuthed();
-      allow update, delete: if isSupervisor();
+      allow update, delete: if isOperationsManager();
     }
 
     // Incidents — guards file their own; supervisors read/resolve
     match /incidents/{id} {
-      allow read:   if isAuthed() && (isSupervisor() || resource.data.guardId == request.auth.uid);
+      allow read:   if isOperationsManager() || ownsClient(resource) || resource.data.guardId == request.auth.uid;
       allow create: if isAuthed() && request.resource.data.guardId == request.auth.uid;
-      allow update: if isSupervisor();
-      allow delete: if isSupervisor();
+      allow update: if isOperationsManager();
+      allow delete: if isOperationsManager();
     }
 
     // Admin logs — append-only
     match /adminLogs/{id} {
-      allow read: if isSupervisor();
+      allow read: if isOperationsManager();
       allow create: if isAuthed();
       allow update, delete: if false;
     }

@@ -499,12 +499,19 @@ function SiteFormFields({ form, onChange }) {
       />
       <div className="grid grid-cols-2 gap-4">
         <Field label="Total Checkpoints">
-          <input className="input-spot" type="number" min="0" value={form.checkpointsCount} onChange={e => onChange('checkpointsCount', e.target.value)} placeholder="0" />
+          <div className="input-spot flex items-center justify-between text-slate-300"><span>{form.checkpointsCount || 0} QR checkpoints</span><span className="text-[10px] uppercase tracking-wider text-emerald-400">Auto synced</span></div>
         </Field>
-        <Field label="Cover Image URL (optional)">
-          <input className="input-spot" value={form.image} onChange={e => onChange('image', e.target.value)} placeholder="https://..." />
+        <Field label="Cover Image">
+          <input className="input-spot" type="file" accept="image/*" onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => onChange('image', reader.result);
+            reader.readAsDataURL(file);
+          }} />
         </Field>
       </div>
+      {form.image && <img src={form.image} alt="Site cover preview" className="h-32 w-full rounded-xl object-cover border border-white/10" />}
     </>
   );
 }

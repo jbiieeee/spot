@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Layout from '../components/Layout';
 import { useSpot } from '../context/SpotContext';
 import { History, Search, ShieldCheck, Filter, Terminal } from 'lucide-react';
@@ -7,6 +7,10 @@ export default function AdminLogs() {
   const { auditLogs } = useSpot();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
+  const [actorFilter, setActorFilter] = useState('All');
+  const [dateFilter, setDateFilter] = useState('');
+
+  const actors = useMemo(() => ['All', ...new Set(auditLogs.map((log) => log.actor))], [auditLogs]);
 
   const filteredLogs = auditLogs.filter((log) => {
     const matchesSearch =
@@ -14,7 +18,9 @@ export default function AdminLogs() {
       log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
       log.details.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = categoryFilter === 'All' || log.category === categoryFilter;
-    return matchesSearch && matchesCategory;
+    const matchesActor = actorFilter === 'All' || log.actor === actorFilter;
+    const matchesDate = !dateFilter || log.timestamp.includes(dateFilter);
+    return matchesSearch && matchesCategory && matchesActor && matchesDate;
   });
 
   return (
@@ -36,8 +42,12 @@ export default function AdminLogs() {
             />
           </div>
 
+          <select value={actorFilter} onChange={(event) => setActorFilter(event.target.value)} className="input-spot w-full sm:w-48"><option value="All">All users</option>{actors.filter((actor) => actor !== 'All').map((actor) => <option key={actor}>{actor}</option>)}</select>
+          <input type="date" value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} className="input-spot w-full sm:w-40" />
+          <button onClick={() => window.print()} className="btn-secondary shrink-0 text-xs">Print report</button>
+
           <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs overflow-x-auto custom-scrollbar">
-            {['All', 'Verification', 'System Change', 'Login', 'Synchronization'].map((cat) => (
+            {['All', 'Verification', 'System Change', 'Login', 'Synchronization', 'Patrol Behavior'].map((cat) => (
               <button
                 key={cat}
                 onClick={() => setCategoryFilter(cat)}

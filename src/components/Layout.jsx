@@ -28,12 +28,34 @@ export default function Layout({ children, title, subtitle, actions }) {
   const { profile } = useAuth();
   const [now, setNow] = useState(() => new Date());
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [pointer, setPointer] = useState({ x: -200, y: -200 });
+  const [readNotificationIds, setReadNotificationIds] = useState(() => new Set());
   const location = useLocation();
+
+  const notificationStorageKey = `spot.read-notifications.${profile?.id || 'session'}`;
+  const unreadCount = liveEvents.filter((event) => !readNotificationIds.has(event.id)).length;
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(notificationStorageKey) || '[]');
+      setReadNotificationIds(new Set(stored));
+    } catch {
+      setReadNotificationIds(new Set());
+    }
+  }, [notificationStorageKey]);
+
+  const openNotifications = () => {
+    const nextReadIds = new Set(readNotificationIds);
+    liveEvents.forEach((event) => nextReadIds.add(event.id));
+    setReadNotificationIds(nextReadIds);
+    localStorage.setItem(notificationStorageKey, JSON.stringify([...nextReadIds].slice(-100)));
+    setNotificationsOpen((previous) => !previous);
+  };
 
   // Compute breadcrumb trail label based on current route
   const getBreadcrumb = () => {
@@ -44,6 +66,7 @@ export default function Layout({ children, title, subtitle, actions }) {
     if (path === '/guards') return 'Command Center / Guards Directory';
     if (path === '/face-verify') return 'Command Center / Face Enrollment';
     if (path === '/sites') return 'Command Center / Deployment Sites';
+    if (path === '/checkpoints') return 'Command Center / QR Checkpoints';
     if (path === '/clients') return 'Command Center / Client Accounts';
     if (path === '/schedules') return 'Command Center / Duty Schedules';
     if (path === '/incidents') return 'Command Center / Incident Center';
@@ -56,7 +79,15 @@ export default function Layout({ children, title, subtitle, actions }) {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#0F172A] text-slate-100 selection:bg-blue-600 selection:text-white">
+    <div
+      className="relative flex h-screen w-screen overflow-hidden bg-[#0F172A] text-slate-100 selection:bg-blue-600 selection:text-white"
+      onPointerMove={(event) => setPointer({ x: event.clientX, y: event.clientY })}
+    >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed z-10 hidden h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-400/[0.035] blur-3xl md:block"
+        style={{ left: pointer.x, top: pointer.y }}
+      />
       {/* Left Collapsible Navigation Sidebar */}
       <Sidebar />
 
@@ -112,18 +143,16 @@ export default function Layout({ children, title, subtitle, actions }) {
             {/* Notifications Dropdown */}
             <div className="relative">
               <button
-                onClick={() => setNotificationsOpen((prev) => !prev)}
+                onClick={openNotifications}
                 className="relative rounded-xl border border-slate-700/80 bg-slate-800/80 p-2.5 text-slate-300 hover:border-slate-600 hover:bg-slate-700 hover:text-white transition"
                 title="Notifications Alert Center"
               >
                 <Bell className="h-5 w-5" />
-                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white">
-                  3
-                </span>
+                {unreadCount > 0 && <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">{unreadCount > 99 ? '99+' : unreadCount}</span>}
               </button>
 
               {notificationsOpen && (
-                <div className="absolute right-0 mt-3 w-80 rounded-2xl border border-slate-700 bg-[#1E293B] p-4 shadow-2xl shadow-slate-950 z-50">
+                <div className="fixed left-3 right-3 top-16 rounded-2xl border border-slate-700 bg-[#1E293B] p-4 shadow-2xl shadow-slate-950 z-50 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-3 sm:w-[min(20rem,calc(100vw-2rem))]">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Live Alerts</span>
                     <button
@@ -133,8 +162,9 @@ export default function Layout({ children, title, subtitle, actions }) {
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  <div className="mt-3 space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
-                    {liveEvents.slice(0, 4).map((ev) => (
+                  <div className="mt-3 max-h-[min(60vh,18rem)] space-y-2 overflow-y-auto custom-scrollbar">
+                    {liveEvents.length === 0 && <p className="py-6 text-center text-xs text-slate-500">No new alerts.</p>}
+                    {liveEvents.slice(0, 8).map((ev) => (
                       <div key={ev.id} className="flex items-start gap-2.5 p-2 rounded-xl bg-slate-900/60 text-xs border border-slate-800">
                         <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
                         <div>

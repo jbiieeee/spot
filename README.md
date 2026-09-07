@@ -28,13 +28,13 @@ Fill every `VITE_FB_*` value in `.env` before signing in. The app uses only your
 1. Create a Firebase project.
 2. Register a Web app and copy its config values into `.env`.
 3. Enable Email/Password in Firebase Authentication.
-4. Add your first supervisor account in Authentication.
+4. Add your first SuperAdmin account in Authentication.
 5. Create a Firestore database in production mode.
 6. Add a matching `users/{uid}` document for the supervisor:
 
 ```txt
 name     (string)  = "Your Name"
-role     (string)  = "supervisor"
+role     (string)  = "superadmin"
 email    (string)  = "admin@spot.local"
 active   (boolean) = true
 ```
@@ -55,6 +55,24 @@ active   (boolean) = true
 | `faceProfiles` | Enrolled guard face photos and detection metadata |
 | `attendance`  | Guard time-in/time-out and face enrollment/login events |
 | `incidents`   | Guard incident reports |
+
+## Checkpoint App Sync Contract
+
+The web checkpoint generator stores a unique `qrCode` string such as `SPOT-CP-ABC123`.
+The Android scanner should decode that string, find the matching document in `checkpoints` by `qrCode`, and write a `checkpoint_logs` document with these fields:
+
+```txt
+guardId       (string)
+guardName     (string)
+checkpointId  (string)  // checkpoints document ID
+checkpointName(string)
+siteId        (string)
+clientId      (string)
+verified      (boolean)
+timestamp     (timestamp)
+```
+
+The website listens to `checkpoint_logs` in real time and adds verified scans to the activity and notification stream. New sites and checkpoints created by an Admin carry the active `clientId`, keeping the web and field app records in the same client scope.
 
 ## Face Enrollment Notes
 

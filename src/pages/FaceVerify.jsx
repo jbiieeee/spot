@@ -50,7 +50,7 @@ function dataUrlToBlob(dataUrl) {
 
 async function detectFaces(dataUrl) {
   if (!('FaceDetector' in window)) {
-    return { supported: false, faceDetected: true, faceCount: null };
+    return { supported: false, faceDetected: false, faceCount: null };
   }
 
   const detector = new window.FaceDetector({ fastMode: false, maxDetectedFaces: 2 });
@@ -117,12 +117,15 @@ function GuardPill({ guard, selected, onClick }) {
 export default function FaceVerify() {
   const { guards, addToast, enrollGuardFace, deleteGuardFace } = useSpot();
   const { profile } = useAuth();
-  const canManageFaceProfiles = ['admin', 'supervisor'].includes(String(profile?.role || '').toLowerCase());
+  const canManageFaceProfiles = ['superadmin', 'admin'].includes(String(profile?.role || '').toLowerCase());
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const intervalRef = useRef(null);
   const resetTimerRef = useRef(null);
+  const autoCaptureRef = useRef(false);
+  const faceStabilityRef = useRef(0);
+  const captureHandlerRef = useRef(null);
 
   const [selectedGuard, setSelectedGuard] = useState(null);
   const [cameraActive, setCameraActive] = useState(false);
@@ -133,6 +136,7 @@ export default function FaceVerify() {
   const [savingEnrollment, setSavingEnrollment] = useState(false);
   const [brightness, setBrightness] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [faceScanProgress, setFaceScanProgress] = useState(0);
 
   const guardList = guards.filter(
     g => g.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -150,6 +154,9 @@ export default function FaceVerify() {
       setCameraError('');
       setCapturedImage(null);
       setCapturedFace(null);
+      autoCaptureRef.current = false;
+      faceStabilityRef.current = 0;
+      setFaceScanProgress(0);
 
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('Camera capture is not supported in this browser.');
@@ -276,6 +283,33 @@ export default function FaceVerify() {
     }
   };
 
+  captureHandlerRef.current = handleCapture;
+
+  useEffect(() => {
+    if (!cameraActive || capturedImage) return undefined;
+    const scanTimer = setInterval(async () => {
+      if (autoCaptureRef.current || !videoRef.current?.videoWidth) return;
+      try {
+        const frame = captureFrame(videoRef.current, 240);
+        if (frame.brightness < 0.12) {
+          faceStabilityRef.current = 0;
+          setFaceScanProgress(0);
+          return;
+        }
+        const result = await detectFaces(frame.dataUrl);
+        faceStabilityRef.current = result.supported && result.faceDetected ? faceStabilityRef.current + 1 : 0;
+        setFaceScanProgress(Math.min((faceStabilityRef.current / 3) * 100, 100));
+        if (faceStabilityRef.current >= 3 && captureHandlerRef.current) {
+          autoCaptureRef.current = true;
+          await captureHandlerRef.current();
+        }
+      } catch {
+        setFaceScanProgress(0);
+      }
+    }, 650);
+    return () => clearInterval(scanTimer);
+  }, [cameraActive, capturedImage]);
+
   // Save enrollment profile and attendance record.
   const handleVerify = async () => {
     if (!selectedGuard || !capturedImage || savingEnrollment) return;
@@ -322,6 +356,9 @@ export default function FaceVerify() {
     setCapturedImage(null);
     setCapturedFace(null);
     setStatus('capturing');
+    autoCaptureRef.current = false;
+    faceStabilityRef.current = 0;
+    setFaceScanProgress(0);
   };
 
   const handleReset = () => {
@@ -334,6 +371,9 @@ export default function FaceVerify() {
     setCapturedFace(null);
     setSavingEnrollment(false);
     setCameraError('');
+    autoCaptureRef.current = false;
+    faceStabilityRef.current = 0;
+    setFaceScanProgress(0);
   };
 
   const handleDeleteEnrollment = async () => {
@@ -467,7 +507,7 @@ export default function FaceVerify() {
               <video
                 ref={videoRef}
                 className="absolute inset-0 w-full h-full object-cover"
-                style={{ display: cameraActive && !capturedImage ? 'block' : 'none' }}
+                style={{ display: cameraActive && !capturedImage ? 'block' : 'none', transform: 'scaleX(-1)' }}
                 muted
                 playsInline
               />
@@ -478,6 +518,7 @@ export default function FaceVerify() {
                   src={capturedImage}
                   alt="Captured face"
                   className="absolute inset-0 w-full h-full object-cover"
+                  style={{ transform: 'scaleX(-1)' }}
                 />
               )}
 
@@ -494,7 +535,14 @@ export default function FaceVerify() {
               {/* Face guide overlay */}
               {cameraActive && !capturedImage && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="h-48 w-40 rounded-full border-4 border-blue-400/60 shadow-[0_0_40px_rgba(59,130,246,0.25)]" />
+                  <div className="face-scan-frame h-48 w-40 rounded-full border-4 border-cyan-300/70 shadow-[0_0_40px_rgba(34,211,238,0.3)]"><span className="face-scan-line" /></div>
+                </div>
+              )}
+
+              {cameraActive && !capturedImage && (
+                <div className="absolute bottom-3 left-4 right-4 rounded-lg border border-cyan-300/20 bg-slate-950/70 p-2 text-center text-[10px] font-semibold uppercase tracking-wider text-cyan-200 backdrop-blur-sm">
+                  {faceScanProgress >= 100 ? 'Face locked - capturing' : 'Scanning face'}
+                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-700"><div className="h-full rounded-full bg-cyan-300 transition-all" style={{ width: `${faceScanProgress}%` }} /></div>
                 </div>
               )}
 

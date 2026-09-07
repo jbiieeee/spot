@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Lock, Radio, KeyRound, ArrowRight } from 'lucide-react';
+import { Shield, Lock, Radio, KeyRound, ArrowRight, Activity, Wifi, Fingerprint } from 'lucide-react';
 
 const formatTime = (date) => date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 const ATTEMPT_KEY = 'spot.auth.attempts';
@@ -85,7 +85,14 @@ export default function Login() {
         const nextState = { count: nextCount, lockedUntil: 0 };
         saveAttemptState(nextState);
         setAttemptState(nextState);
-        setError(err.message || 'Login failed. Please check your credentials.');
+        const loginMessage = {
+          'auth/invalid-credential': 'Email or password is incorrect.',
+          'auth/user-not-found': 'No account exists for this email.',
+          'auth/wrong-password': 'Email or password is incorrect.',
+          'auth/too-many-requests': 'Too many attempts. Please wait before trying again.',
+          'auth/user-disabled': 'This account has been disabled. Contact your administrator.'
+        }[err.code] || err.message || 'Login failed. Please check your credentials.';
+        setError(loginMessage);
       }
     } finally {
       setBusy(false);
@@ -96,35 +103,43 @@ export default function Login() {
   const signInDisabled = busy || locked;
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#0F172A] p-4 text-slate-100 flex items-center justify-center">
+    <div className="login-shell relative min-h-screen overflow-hidden bg-[#0F172A] p-4 text-slate-100 flex items-center justify-center">
       <div className="security-grid absolute inset-0 opacity-95" />
+      <div className="login-orbit login-orbit-one" />
+      <div className="login-orbit login-orbit-two" />
+      <div className="login-scanline" />
 
       <div className="relative z-10 mx-auto grid w-full max-w-5xl items-center gap-8 lg:grid-cols-[1fr_420px]">
         {/* Left Branding */}
-        <section className="hidden text-white lg:block">
+        <section className="login-entrance hidden text-white lg:block">
           <div className="mb-6 inline-flex items-center gap-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3.5 py-2 text-xs font-semibold text-blue-400 backdrop-blur">
             <Shield className="h-4 w-4 text-blue-400" />
             S.P.O.T Security Patrol Operations Tracker
           </div>
 
-          <h1 className="text-4xl font-bold leading-tight text-white tracking-tight">
-            Web Command Center
+          <h1 className="mt-8 max-w-2xl text-5xl font-bold leading-[1.05] text-white tracking-tight xl:text-6xl">
+            One view for every <span className="text-cyan-300">critical move.</span>
           </h1>
           <p className="mt-4 max-w-xl text-sm leading-relaxed text-slate-300">
             Real-time supervisor operations for patrol monitoring, guard GPS telemetry, checkpoint integrity, and incident response.
           </p>
 
           <div className="mt-8 grid grid-cols-2 gap-3 max-w-md">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
+            <div className="login-metric rounded-xl border border-slate-800 bg-slate-900/80 p-4">
               <div className="text-[10px] uppercase font-bold text-slate-400">Authentication</div>
               <div className="mt-1 text-sm font-bold text-emerald-400 flex items-center gap-1.5">
                 <Lock className="h-4 w-4" /> Credentials Required
               </div>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
+            <div className="login-metric rounded-xl border border-slate-800 bg-slate-900/80 p-4">
               <div className="text-[10px] uppercase font-bold text-slate-400">System Time</div>
               <div className="mt-1 text-sm font-bold text-blue-400 font-mono">{formatTime(now)}</div>
             </div>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <span className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5"><Activity className="h-3 w-3 text-cyan-300" /> Live telemetry</span>
+            <span className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5"><Fingerprint className="h-3 w-3 text-emerald-300" /> Identity protected</span>
+            <span className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5"><Wifi className="h-3 w-3 text-blue-300" /> Firebase sync</span>
           </div>
         </section>
 
@@ -133,11 +148,12 @@ export default function Login() {
           <form
             onSubmit={submit}
             aria-busy={busy}
-            className="overflow-hidden rounded-2xl border border-slate-700/80 bg-[#1E293B] shadow-2xl p-6 text-slate-100 space-y-4"
+            className="login-card overflow-hidden rounded-2xl border border-slate-700/80 bg-[#1E293B]/95 shadow-2xl p-6 text-slate-100 space-y-4 backdrop-blur-xl sm:p-8"
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
-                <h2 className="text-lg font-bold text-white">Supervisor Sign In</h2>
+                <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 shadow-lg shadow-cyan-500/20"><Shield className="h-5 w-5 text-white" /></div>
+                <h2 className="text-xl font-bold text-white">Enter command center</h2>
                 <p className="text-xs text-slate-400">Enter credentials to open command console</p>
               </div>
               <span className="badge-info text-[10px]">AUTH REQUIRED</span>
@@ -190,7 +206,7 @@ export default function Login() {
               </label>
             </div>
 
-            <button type="submit" disabled={signInDisabled} className="btn-primary w-full py-2.5 text-xs font-bold justify-center">
+            <button type="submit" disabled={signInDisabled} className="btn-primary login-submit w-full py-3 text-xs font-bold justify-center">
               {busy ? (
                 'Verifying Credentials...'
               ) : (

@@ -4,8 +4,8 @@
 
 @layer base {
   html {
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    letter-spacing: -0.011em;
+    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+    letter-spacing: 0;
     color-scheme: dark;
   }
 
@@ -34,7 +34,7 @@
 
   /* Cards: Rounded 16px */
   .card-spot {
-    @apply rounded-[16px] border border-slate-800/90 bg-[#1E293B] p-5 shadow-xl shadow-slate-950/40 transition-all duration-200 hover:border-slate-700/80;
+    @apply rounded-[16px] border border-white/10 bg-slate-800/55 p-5 shadow-xl shadow-slate-950/40 backdrop-blur-xl transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-400/25;
   }
 
   /* Input fields */
@@ -61,6 +61,73 @@
   .badge-neutral {
     @apply badge-spot bg-slate-800 text-[#64748B] border border-slate-700;
   }
+}
+
+.glass-panel {
+  @apply border border-white/10 bg-slate-900/45 backdrop-blur-xl shadow-2xl shadow-slate-950/30;
+}
+
+.interactive-lift {
+  @apply transition duration-200 hover:-translate-y-0.5 hover:border-blue-400/30 hover:shadow-lg hover:shadow-blue-950/20;
+}
+
+.login-shell { isolation: isolate; }
+.login-shell::before { position: absolute; inset: 12% auto auto 8%; z-index: -1; width: 28rem; height: 28rem; border-radius: 999px; content: ''; background: rgba(14, 165, 233, 0.12); filter: blur(90px); animation: login-breathe 7s ease-in-out infinite; }
+.login-shell::after { position: absolute; inset: auto 5% 8% auto; z-index: -1; width: 22rem; height: 22rem; border-radius: 999px; content: ''; background: rgba(16, 185, 129, 0.08); filter: blur(80px); animation: login-breathe 9s ease-in-out infinite reverse; }
+.login-orbit { position: absolute; border: 1px solid rgba(103, 232, 249, 0.12); border-radius: 999px; pointer-events: none; }
+.login-orbit-one { width: 34rem; height: 34rem; right: -12rem; top: -12rem; animation: orbit-spin 24s linear infinite; }
+.login-orbit-two { width: 22rem; height: 22rem; left: -10rem; bottom: -9rem; border-color: rgba(52, 211, 153, 0.1); animation: orbit-spin 18s linear infinite reverse; }
+.login-scanline { position: absolute; inset: 0; pointer-events: none; opacity: 0.25; background: linear-gradient(180deg, transparent 0%, rgba(103, 232, 249, 0.04) 50%, transparent 100%); background-size: 100% 180px; animation: login-scan 10s linear infinite; }
+.login-entrance { animation: login-rise 700ms ease-out both; }
+.login-card { animation: login-rise 700ms 120ms ease-out both; }
+.login-metric { transition: transform 220ms ease, border-color 220ms ease, background 220ms ease; }
+.login-metric:hover { transform: translateY(-3px); border-color: rgba(103, 232, 249, 0.35); background: rgba(15, 23, 42, 0.95); }
+.login-submit { position: relative; overflow: hidden; }
+.login-submit::after { position: absolute; inset: 0 auto 0 -35%; width: 25%; content: ''; background: rgba(255, 255, 255, 0.2); transform: skewX(-20deg); animation: button-glint 3.5s ease-in-out infinite; }
+@keyframes login-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes login-breathe { 0%, 100% { transform: scale(0.95); opacity: 0.65; } 50% { transform: scale(1.08); opacity: 1; } }
+@keyframes orbit-spin { to { transform: rotate(360deg); } }
+@keyframes login-scan { from { background-position: 0 -180px; } to { background-position: 0 calc(100% + 180px); } }
+@keyframes button-glint { 0%, 55% { transform: translateX(0) skewX(-20deg); opacity: 0; } 70% { opacity: 1; } 90%, 100% { transform: translateX(600%) skewX(-20deg); opacity: 0; } }
+
+.command-grid {
+  background-image:
+    linear-gradient(rgba(56, 189, 248, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: center top;
+}
+
+.live-map-shell::after {
+  position: absolute;
+  inset: 3.5rem 0 0;
+  z-index: 1;
+  pointer-events: none;
+  content: '';
+  background: linear-gradient(180deg, transparent 0%, rgba(56, 189, 248, 0.035) 48%, transparent 52%);
+  background-size: 100% 180px;
+  animation: telemetry-sweep 8s linear infinite;
+}
+
+@keyframes telemetry-sweep {
+  from { background-position: 0 -180px; }
+  to { background-position: 0 calc(100% + 180px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .live-map-shell::after {
+    animation: none;
+  }
+
+  .face-scan-frame, .face-scan-line { animation: none; }
+  .login-shell::before, .login-shell::after, .login-orbit, .login-scanline, .login-entrance, .login-card, .login-submit::after { animation: none; }
 }
 
 /* Custom Scrollbars & Utilities */
@@ -114,6 +181,11 @@
   animation: emergency-pulse 1.2s infinite ease-in-out;
 }
 
+.face-scan-frame { position: relative; overflow: hidden; animation: face-frame-pulse 2s ease-in-out infinite; }
+.face-scan-line { position: absolute; left: 8%; right: 8%; top: 8%; height: 2px; background: #67e8f9; box-shadow: 0 0 14px 4px rgba(34, 211, 238, 0.65); animation: face-scan 2.2s ease-in-out infinite; }
+@keyframes face-scan { 0%, 100% { transform: translateY(0); opacity: 0.35; } 50% { transform: translateY(172px); opacity: 1; } }
+@keyframes face-frame-pulse { 0%, 100% { border-color: rgba(103, 232, 249, 0.55); } 50% { border-color: rgba(52, 211, 153, 0.95); } }
+
 /* Leaflet custom dark map styles */
 .leaflet-container {
   background-color: #0F172A !important;
@@ -138,4 +210,12 @@
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+@media print {
+  body { background: white !important; color: #0f172a !important; }
+  body * { visibility: hidden; }
+  .card-spot, .card-spot * { visibility: visible; }
+  .card-spot { position: absolute; inset: 0; width: 100%; background: white !important; color: #0f172a !important; box-shadow: none !important; }
+  button, input, select { display: none !important; }
 }

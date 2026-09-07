@@ -9,7 +9,7 @@ export default function Profile() {
   const { addToast } = useSpot();
 
   const [name, setName] = useState(profile?.name || '');
-  const [role, setRole] = useState(profile?.role || 'Supervisor Command Officer');
+  const [role, setRole] = useState(profile?.role || 'superadmin');
   const [agency, setAgency] = useState(profile?.agency || 'S.P.O.T Command HQ');
   const [phone, setPhone] = useState(profile?.phone || '+63 917 555 0100');
 
@@ -102,10 +102,11 @@ export default function Profile() {
                   type="text"
                   required
                   value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="input-spot"
-                  placeholder="e.g. Chief Operations Officer"
+                  readOnly
+                  className="input-spot cursor-not-allowed opacity-70"
+                  aria-describedby="role-help"
                 />
+                <p id="role-help" className="mt-1 text-[10px] text-slate-500">Role changes are managed by a SuperAdmin.</p>
               </div>
 
               <div>
