@@ -87,21 +87,25 @@ export default function Dashboard() {
     >
       <div className="command-grid space-y-6">
         {/* Top 8 Statistics Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3.5">
+        <div className="grid auto-rows-fr grid-cols-2 gap-3.5 sm:grid-cols-4 lg:grid-cols-8">
           {topCards.map((card, idx) => {
             const Icon = card.icon;
+            const isFeatured = idx === 0;
+            const isSecondary = idx === 1 || idx === 2;
             return (
               <div
                 key={idx}
-                className="card-spot flex flex-col justify-between p-4 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl"
+                className={`card-spot flex min-h-[112px] cursor-pointer flex-col justify-between p-4 transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl ${
+                  isFeatured ? 'min-h-[232px] p-5 lg:col-span-2 lg:row-span-2' : isSecondary ? 'lg:col-span-2' : ''
+                }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-slate-400 truncate">{card.title}</span>
+                  <span className={`${isFeatured ? 'text-xs' : 'text-[11px]'} truncate font-semibold text-slate-400`}>{card.title}</span>
                   <div className={`p-1.5 rounded-lg border ${card.bg}`}>
-                    <Icon className={`h-4 w-4 ${card.color}`} />
+                    <Icon className={`${isFeatured ? 'h-5 w-5' : 'h-4 w-4'} ${card.color}`} />
                   </div>
                 </div>
-                <div className="mt-3 text-2xl font-bold text-white tracking-tight">{card.count}</div>
+                <div className={`${isFeatured ? 'text-4xl' : 'text-2xl'} mt-3 font-bold tracking-tight text-white`}>{card.count}</div>
               </div>
             );
           })}
@@ -241,9 +245,9 @@ export default function Dashboard() {
         </div>
 
         {/* Bottom Analytics Visuals */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
           {/* Patrol Completion Overview Bar */}
-          <div className="card-spot">
+          <div className="card-spot min-h-[300px] lg:col-span-5">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
               <h4 className="text-sm font-bold text-white flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-blue-400" /> Patrol Completion Status
@@ -297,7 +301,7 @@ export default function Dashboard() {
           </div>
 
           {/* Average Patrol Duration */}
-          <div className="card-spot">
+          <div className="card-spot min-h-[280px] lg:col-span-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
               <h4 className="text-sm font-bold text-white flex items-center gap-2">
                 <Clock className="h-4 w-4 text-emerald-400" /> Patrol Duration Metrics
@@ -323,7 +327,7 @@ export default function Dashboard() {
           </div>
 
           {/* Incident Trend Heatmap */}
-          <div className="card-spot">
+          <div className="card-spot min-h-[240px] lg:col-span-3">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
               <h4 className="text-sm font-bold text-white flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-rose-400" /> Incident Trend Analysis

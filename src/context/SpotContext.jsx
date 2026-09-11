@@ -338,7 +338,24 @@ export function SpotProvider({ children }) {
       mergePatrols();
     });
 
-    const unsubSchedules = subscribeForRole('schedules', (fsSchedules) => setSchedules((fsSchedules || []).map((schedule) => ({ id: schedule.id, guardId: schedule.guardId || '', guardName: schedule.guardName || 'Guard', siteId: schedule.siteId || '', siteName: schedule.siteName || 'Site', shift: schedule.shift || 'Day Shift', date: schedule.date || '', status: schedule.status || 'Scheduled', clientId: schedule.clientId || '' }))));
+    const unsubSchedules = subscribeForRole('schedules', (fsSchedules) => setSchedules((fsSchedules || []).map((schedule) => ({
+      id: schedule.id,
+      guardId: schedule.guardId || '',
+      guardName: schedule.guardName || 'Guard',
+      siteId: schedule.siteId || '',
+      siteName: schedule.siteName || 'Site',
+      shift: schedule.shift || 'Day Shift',
+      date: schedule.date || '',
+      status: schedule.status || 'Scheduled',
+      clientId: schedule.clientId || '',
+      patrolWindows: Array.isArray(schedule.patrolWindows) ? schedule.patrolWindows.map((window, index) => ({
+        id: window.id || `window-${index + 1}`,
+        name: window.name || `Patrol ${index + 1}`,
+        startTime: window.startTime || '',
+        endTime: window.endTime || '',
+        checkpointIds: Array.isArray(window.checkpointIds) ? window.checkpointIds : []
+      })) : []
+    }))));
 
     // 5. Audit Logs
     const unsubAudit = subscribeForRole('adminLogs', (fsAudit) => {

@@ -277,11 +277,15 @@ export default function Incidents() {
       {/* ── Incident Detail & Resolution Modal ──────────────────── */}
       {selectedIncident && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-700 bg-[#1E293B] shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 p-5">
-              <div>
-                <span className="text-xs font-mono text-rose-400">{selectedIncident.id} • Priority {selectedIncident.priority}</span>
-                <h3 className="text-lg font-bold text-white">{selectedIncident.title}</h3>
+          <div className="w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-700 bg-[#1E293B] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-800 bg-slate-900/25 p-6">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
+                  <span className="font-mono text-slate-500">{selectedIncident.id}</span>
+                  <span className={`rounded-full px-2.5 py-1 ${selectedIncident.priority === 'High' ? 'bg-rose-500/20 text-rose-300' : selectedIncident.priority === 'Medium' ? 'bg-amber-500/20 text-amber-300' : 'bg-blue-500/20 text-blue-300'}`}>{selectedIncident.priority} priority</span>
+                  <span className={`rounded-full px-2.5 py-1 ${selectedIncident.status === 'Resolved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>{selectedIncident.status}</span>
+                </div>
+                <h3 className="mt-3 text-xl font-bold leading-tight text-white">{selectedIncident.title}</h3>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -300,46 +304,28 @@ export default function Incidents() {
               </div>
             </div>
 
-            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar">
+            <div className="max-h-[75vh] space-y-5 overflow-y-auto p-6 custom-scrollbar">
               <img
                 src={selectedIncident.evidencePhoto || 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?auto=format&fit=crop&w=600&q=80'}
                 alt={selectedIncident.title}
-                className="w-full h-56 rounded-xl object-cover border border-slate-800 shadow-md"
+                className="h-64 w-full rounded-xl border border-slate-700 object-cover shadow-md"
               />
 
-              <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Location:</span>
-                  <span className="font-bold text-white">{selectedIncident.location} ({selectedIncident.siteName})</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Reported By:</span>
-                  <span className="font-bold text-blue-400">{selectedIncident.reporterName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Timestamp:</span>
-                  <span className="font-mono text-slate-200">{selectedIncident.timestamp}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Status:</span>
-                  <span className={`font-bold ${selectedIncident.status === 'Resolved' ? 'text-emerald-400' : 'text-amber-400'}`}>
-                    {selectedIncident.status}
-                  </span>
-                </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 p-4"><div className="text-[10px] font-bold uppercase tracking-wider text-blue-300">Location</div><div className="mt-2 text-sm font-bold text-white">{selectedIncident.location || 'Not specified'}</div><div className="mt-1 text-xs text-slate-400">{selectedIncident.siteName || 'Facility not specified'}</div></div>
+                <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-4"><div className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">Reported by</div><div className="mt-2 text-sm font-bold text-white">{selectedIncident.reporterName || 'Unknown reporter'}</div><div className="mt-1 text-xs text-slate-400">Field report source</div></div>
+                <div className="rounded-xl border border-white/10 bg-slate-900/50 p-4"><div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Timestamp</div><div className="mt-2 font-mono text-sm font-bold text-slate-200">{selectedIncident.timestamp || 'Recently'}</div><div className="mt-1 text-xs text-slate-500">Recorded event time</div></div>
+                <div className={`rounded-xl border p-4 ${selectedIncident.status === 'Resolved' ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-amber-500/20 bg-amber-500/5'}`}><div className={`text-[10px] font-bold uppercase tracking-wider ${selectedIncident.status === 'Resolved' ? 'text-emerald-300' : 'text-amber-300'}`}>Current status</div><div className={`mt-2 text-sm font-bold ${selectedIncident.status === 'Resolved' ? 'text-emerald-400' : 'text-amber-400'}`}>{selectedIncident.status}</div><div className="mt-1 text-xs text-slate-500">Response workflow state</div></div>
               </div>
 
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Description & Evidence Details</h4>
-                <p className="text-xs leading-relaxed text-slate-200 p-3 rounded-xl bg-slate-900/40 border border-slate-800">
-                  {selectedIncident.description}
-                </p>
+              <div className="rounded-xl border border-white/10 bg-slate-900/45 p-4">
+                <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Description &amp; evidence details</h4>
+                <p className="mt-3 text-sm leading-7 text-slate-200">{selectedIncident.description || 'No description was provided.'}</p>
               </div>
 
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Actions Taken</h4>
-                <p className="text-xs leading-relaxed text-slate-200 p-3 rounded-xl bg-slate-900/40 border border-slate-800">
-                  {selectedIncident.actionsTaken}
-                </p>
+              <div className="rounded-xl border border-amber-500/15 bg-amber-500/5 p-4">
+                <h4 className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Actions taken</h4>
+                <p className="mt-3 text-sm leading-7 text-slate-200">{selectedIncident.actionsTaken || 'Pending supervisor review.'}</p>
               </div>
             </div>
 
